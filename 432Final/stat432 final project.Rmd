@@ -6,9 +6,24 @@ output: pdf_document
 ---
 ```{r,echo=FALSE}
 #read-in data
-year1 = read.csv("/Users/maryliu/Downloads/data (1)/csv_result-1year.csv")
-year2 = read.csv("/Users/maryliu/Downloads/data (1)/csv_result-2year.csv")
+
 year3 = read.csv("/Users/maryliu/Downloads/data (1)/csv_result-3year.csv")
-year4 = read.csv("/Users/maryliu/Downloads/data (1)/csv_result-4year.csv")
-year5 = read.csv("/Users/maryliu/Downloads/data (1)/csv_result-5year.csv")
+
+```
+
+```{r,echo=FALSE}
+#import library
+library(ggplot2)
+
+```
+
+### Missing Values & Datat Preprocessing
+
+We first conduct basic data preprocessing. Missing values for each dataset are shown in the graph below.
+
+
+```{r, echo=FALSE}
+
+year3[year3 == "?"] = NA
+
 ```
