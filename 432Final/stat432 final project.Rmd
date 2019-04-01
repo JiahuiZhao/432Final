@@ -27,3 +27,13 @@ We first conduct basic data preprocessing. Missing values for each dataset are s
 year3[year3 == "?"] = NA
 
 ```
+
+```{r, echo=FALSE}
+
+num3 = sum(complete.cases(year3))
+missing = data.frame(rbind(num3))
+colnames(missing) = 'missing'
+rownames(missing) = 'missing values'
+
+ggplot(missing, aes(x = c('year 3'), y=missing)) + geom_bar(stat="identity") + theme(axis.title.x = element_blank(), axis.title.y = element_blank())  + ggtitle("Missing values")
+```
