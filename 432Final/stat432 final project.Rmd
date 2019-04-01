@@ -1,0 +1,14 @@
+---
+title: "432 final project"
+author: "Mary Liu"
+date: "4/1/2019"
+output: pdf_document
+---
+```{r,echo=FALSE}
+#read-in data
+year1 = read.csv("/Users/maryliu/Downloads/data (1)/csv_result-1year.csv")
+year2 = read.csv("/Users/maryliu/Downloads/data (1)/csv_result-2year.csv")
+year3 = read.csv("/Users/maryliu/Downloads/data (1)/csv_result-3year.csv")
+year4 = read.csv("/Users/maryliu/Downloads/data (1)/csv_result-4year.csv")
+year5 = read.csv("/Users/maryliu/Downloads/data (1)/csv_result-5year.csv")
+```
