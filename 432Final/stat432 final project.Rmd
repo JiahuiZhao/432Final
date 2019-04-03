@@ -1,64 +1,53 @@
 ---
-title: "432 final project"
-author: "Mary Liu"
+title: "Statistical Learning and Bankruptcy Prediction"
+subtitle: "STAT432 Final Project"
+author: "Group Stepanov"
 date: "4/1/2019"
 output: pdf_document
 ---
-```{r,echo=FALSE}
-#read-in data
-year1 = read.csv("/Users/maryliu/Downloads/data (1)/csv_result-1year.csv")
-year2 = read.csv("/Users/maryliu/Downloads/data (1)/csv_result-2year.csv")
-year3 = read.csv("/Users/maryliu/Downloads/data (1)/csv_result-3year.csv")
-year4 = read.csv("/Users/maryliu/Downloads/data (1)/csv_result-4year.csv")
-year5 = read.csv("/Users/maryliu/Downloads/data (1)/csv_result-5year.csv")
+
+## Prepare packages
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r,echo=FALSE}
-#import library
-library(ggplot2)
+```{r, include = FALSE}
+# install and load packages
+pkg_list = c('ggplot2', 'tidyr', 'stringr', 'dplyr', 'foreign', 'knitr','naniar','gridExtra','DMwR','caret')
+to_install_pkgs = pkg_list[!(pkg_list %in% installed.packages()[,"Package"])]
+if(length(to_install_pkgs)) {
+  install.packages(to_install_pkgs, repos = "https://cloud.r-project.org")
+}
+sapply(pkg_list, require, character.only = TRUE)
 
+# Sets default chunk options
+knitr::opts_chunk$set(
+  fig.align = "center", 
+  echo = FALSE,
+  message = FALSE,
+  warning = FALSE
+)
 ```
 
-### Missing Values & Datat Preprocessing
+## Missing Values
 
-We first conduct basic data preprocessing. Missing values for each dataset are shown in the graph below.
-
-
-```{r, echo=FALSE}
-year1[year1 == "?"] = NA
-year2[year2 == "?"] = NA
+```{r,echo=FALSE}
+# clean data
+year3 = foreign::read.arff('3year.arff')
 year3[year3 == "?"] = NA
-year4[year4 == "?"] = NA
-year5[year5 == "?"] = NA
+vis_miss(year3)
 
+# observations contains NA
+sum(!complete.cases(year3))
 ```
 
-```{r, echo=FALSE}
-
-num1 = sum(complete.cases(year1))
-num2 = sum(complete.cases(year2))
-num3 = sum(complete.cases(year3))
-num4 = sum(complete.cases(year4))
-num5 = sum(complete.cases(year5))
-missing = data.frame(rbind(num1, num2, num3, num4, num5))
-#missing = cbind(num1, num2, num3, num4, num5)
-#colnames(missing) = c('year 1', 'year 2', 'year 3', 'year 4', 'year 5')
-colnames(missing) = 'missing'
-#rownames(missing) = 'missing values'
-
-ggplot(missing, aes(x = c('year 1', 'year 2', 'year 3', 'year 4', 'year 5'), y=missing)) + geom_bar(stat="identity") + theme(axis.title.x = element_blank(),
-  axis.title.y = element_blank())  + ggtitle("Missing values")
-```
-
-
-Due to the large number of missing values in each dataset, completely delete missing values will result to a large amount of data loss. Thus, we use variable means to replace missing values. We also drop the first variable `id` and factorize variable `class`.  We take year3 data as an example since it got largest missing value.
+We first conduct basic data preprocessing. Missing values for each dataset are shown in the graph below. Due to the large number of missing values in each dataset, completely delete missing values will result to a large amount of data loss. Thus, we use variable means to replace missing values. We also drop the first variable `id` and factorize variable `class`. 
 
 ```{r}
 asNumeric = function(x){
-  
  as.numeric(as.character(x))
 }
-
 factorsNumeric = function(d){
   modifyList(d, lapply(d[, sapply(d, is.factor)],asNumeric))
 }
@@ -73,31 +62,71 @@ year3$id = NULL
 year3$class = as.factor(year3$class)
 ```
 
-### Pie Charts 
-```{r, echo=FALSE}
-#install.packages("gridExtra")
-library(gridExtra)
-library(ggplot2)
+```{r, echo=FALSE,eval=FALSE}
+# THIS CHUNK IS NOT USED CURRENTLY. 
+
+num1 = sum(complete.cases(year1))
+num2 = sum(complete.cases(year2))
+num3 = sum(complete.cases(year3))
+num4 = sum(complete.cases(year4))
+num5 = sum(complete.cases(year5))
+missing = data.frame(rbind(num1, num2, num3, num4, num5))
+missing = cbind(num1, num2, num3, num4, num5)
+colnames(missing) = c('year 1', 'year 2', 'year 3', 'year 4', 'year 5')
+colnames(missing) = 'missing'
+rownames(missing) = 'missing values'
+
+ggplot(missing, aes(x = c('year 1', 'year 2', 'year 3', 'year 4', 'year 5'), y=missing)) + geom_bar(stat="identity") + theme(axis.title.x = element_blank(),
+  axis.title.y = element_blank())  + ggtitle("Missing values")
+```
+
+## Imbalance Data
+
+### Pie Charts to show the imbalance in response variable
+```{r,warning=FALSE,message=FALSE}
 draw = function(num1, num2){
   type <- c('0 Not Brankrupcy','1 Brankrupcy')
   nums <- c(num1,num2)
   df = data.frame(type = type, nums = nums)
-  p <- ggplot(data = df, mapping = aes(x = 'Content', y = nums, fill = type)) + geom_bar(stat   = 'identity', position = 'stack', width = 1)
+  p <- ggplot(data = df, mapping = aes(x = 'Content', y = nums, fill = type)) + 
+    geom_bar(stat='identity', position = 'stack', width = 1)
 
   label_value = paste('(', round(df$nums/sum(df$nums) * 100, 1), '%)', sep = '')
   label = paste(df$type, label_value, sep = '')
-  p + coord_polar(theta = 'y') + labs(x = '', y = '', title = '') + theme(axis.text =           element_blank()) + theme(axis.ticks = element_blank()) + scale_fill_discrete(labels = label)
+  p + coord_polar(theta = 'y') + labs(x = '', y = '', title = '') + 
+    theme(axis.text = element_blank()) + theme(axis.ticks = element_blank()) + 
+    scale_fill_discrete(labels = label)
 }
 par(mfrow=c(2,3))
 
 p3 = draw(table(year3$class)[1],table(year3$class)[2]) + ggtitle("Year3")
-
-
 grid.arrange(p3, nrow = 3)
 ```
 
-The pie charts above show that the data is imbalanced. It has `0` with above 95.3%.   
+The pie charts above show that the data is imbalanced. It has `0` with above 95.3%. The we use the SMOTE method to oversample the minority group and achieve a more balanced dataset. 
 
+### SMOTE Algorithm For Unbalanced Classification
+```{r}
+# original data
+table(year3$class)
 
+# oversampling data
+year3.oversampled = SMOTE(class~.,year3,perc.over=1000, k = 40, perc.under = 150)
+table(year3.oversampled$class)
+```
 
+By applying SMOTE, the new data set is more balanced. 
 
+Finally, we test 1. NA values, 2. Data Imbalance
+
+```{r}
+nrow(year3.oversampled) == sum(complete.cases(year3.oversampled)) # no NA missing
+table(year3.oversampled$class)  # no imbalanced data
+```
+
+## Data Modeling
+
+## Logistic Regression
+
+### Full model logistic regression
+### Gini Coefficient
