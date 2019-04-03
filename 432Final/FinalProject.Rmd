@@ -164,3 +164,49 @@ If code chunks are used within the document, this information can be dynamically
 [3] Sai Surya Teja Maddikonda and Sree Keerthi Matta, Bankruptcy Prediction: Mining the Polish Bankruptcy Data, https://github.com/smaddikonda/Bankruptcy-Prediction/blob/master/Bankruptcy%20Prediction%20Report.pdf 
 
 [4] Polish Companies Bankruptcy Data Set, UCI Machine Learning Repository,http://archive.ics.uci.edu/ml/datasets/Polish+companies+bankruptcy+data
+
+
+
+#### Random Forest
+```{r}
+# Set mtry using hyperparamter tuning
+oob.err = numeric(15)
+test.err = numeric(15)
+
+for(mtry in 1:15) {
+  rf.loop=randomForest(class~., data = train, 
+                       mtry=mtry, importance=TRUE) 
+  oob.err[mtry] = rf.loop$err.rate[nrow(rf.loop$err.rate),1]
+  
+  pred.loop=predict(rf.loop,newdata=test)
+  test.err[mtry]= sum(pred.loop!=test$class)/length(pred.loop)
+}
+```
+
+```{r}
+matplot(1:mtry, cbind(oob.err,test.err), pch=20 , col=c("red","blue"),type="b",ylab="Mean Squared Error",xlab="Number of Predictors Considered at each Split")
+legend("topright",legend=c("Out of Bag Error","Test Error"),pch=19, col=c("red","blue"))
+```
+
+```{r}
+rf = randomForest(class~.,data = train, mtry=which.min(test.err),
+                  importance=TRUE)
+rf.pred = predict(rf,newdata = test)
+table(rf.pred, test$class)
+```
+
+The error rate for random forest is 
+
+```{r}
+test.err[which.min(test.err)]
+```
+
+```{r}
+plot(rf)
+# black solid line for overall OOB error
+# color line for each category
+```
+
+Currently, the random forest method gives us the best performance. 
+
+
