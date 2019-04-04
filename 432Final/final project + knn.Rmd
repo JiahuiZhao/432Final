@@ -1,0 +1,345 @@
+```{r}
+---
+title: "Statistical Learning and Bankruptcy Prediction"
+subtitle: "STAT432 Final Project"
+author: "Group Stepanov"
+date: "4/1/2019"
+output: pdf_document
+---
+
+## Prepare packages
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r, include = FALSE}
+# install and load packages
+pkg_list = c('ggplot2', 'tidyr', 'stringr', 'dplyr', 'foreign', 'knitr','naniar','gridExtra','DMwR','caret', 'glmnet', 'tree',
+             'randomForest','MASS')
+to_install_pkgs = pkg_list[!(pkg_list %in% installed.packages()[,"Package"])]
+if(length(to_install_pkgs)) {
+  install.packages(to_install_pkgs, repos = "https://cloud.r-project.org")
+}
+sapply(pkg_list, require, character.only = TRUE)
+# Sets default chunk options
+knitr::opts_chunk$set(
+  fig.align = "center", 
+  echo = FALSE,
+  message = FALSE,
+  warning = FALSE,
+  cache = TRUE,
+  error = TRUE
+)
+```
+
+## Missing Values
+
+```{r,echo=FALSE}
+# clean data
+year3 = read.csv('csv_result-3year.csv')
+year3[year3 == "?"] = NA
+# observations contains NA
+sum(!complete.cases(year3))
+```
+
+We first conduct basic data preprocessing. Missing values for each dataset are shown in the graph below. Due to the large number of missing values in each dataset, completely delete missing values will result to a large amount of data loss. Thus, we use variable means to replace missing values. We also drop the first variable `id` and factorize variable `class`. 
+
+```{r}
+asNumeric = function(x){
+ as.numeric(as.character(x))
+}
+factorsNumeric = function(d){
+  modifyList(d, lapply(d[, sapply(d, is.factor)],asNumeric))
+}
+year3 = factorsNumeric(year3)
+for(i in 1:(ncol(year3)-1)){
+  year3[is.na(year3[,i]), i] <- mean(year3[,i], na.rm = TRUE)
+}
+year3$class = as.factor(year3$class)
+```
+
+## Imbalance Data
+
+### Pie Charts to show the imbalance in response variable
+```{r,warning=FALSE,message=FALSE}
+draw = function(num1, num2){
+  type <- c('0 Not Brankrupcy','1 Brankrupcy')
+  nums <- c(num1,num2)
+  df = data.frame(type = type, nums = nums)
+  p <- ggplot(data = df, mapping = aes(x = 'Content', y = nums, fill = type)) + 
+    geom_bar(stat='identity', position = 'stack', width = 1)
+  label_value = paste('(', round(df$nums/sum(df$nums) * 100, 1), '%)', sep = '')
+  label = paste(df$type, label_value, sep = '')
+  p + coord_polar(theta = 'y') + labs(x = '', y = '', title = '') + 
+    theme(axis.text = element_blank()) + theme(axis.ticks = element_blank()) + 
+    scale_fill_discrete(labels = label)
+}
+par(mfrow=c(2,3))
+p3 = draw(table(year3$class)[1],table(year3$class)[2]) + ggtitle("Year3")
+grid.arrange(p3, nrow = 3)
+```
+
+The pie charts above show that the data is imbalanced. It has `0` with above 95.3%. The we use the SMOTE method to oversample the minority group and achieve a more balanced dataset. 
+
+### SMOTE Algorithm For Unbalanced Classification
+```{r}
+# original data
+table(year3$class)
+# oversampling data
+year3.oversampled = SMOTE(class~.,year3,perc.over=1000, k = 40, perc.under = 150)
+table(year3.oversampled$class)
+```
+
+By applying SMOTE, the new data set is more balanced. 
+
+Finally, we test 1. NA values, 2. Data Imbalance
+
+```{r}
+nrow(year3.oversampled) == sum(complete.cases(year3.oversampled)) # no NA missing
+table(year3.oversampled$class)  # no imbalanced data
+```
+
+## Data Modeling
+
+### Split data
+```{r}
+set.seed(1)
+index = createDataPartition(year3.oversampled$class,p=0.7,list=F)
+train = year3.oversampled[index,]
+test = year3.oversampled[-index,]
+```
+
+### Logistic Regression
+The `glm` function fits generalized linear models, a class of models that includes logistic regression. Since the dependent variable `class` in our dataset contains only two categories, we will pass the argument `family = binomial` in order to tell R to run a logistic regression rather than some other type of generalized linear model. The function, logit model, we will use is 
+
+$$Pr(Y=1|X) = \frac{e^{\beta_0 + \beta_1 X}}{1 + e^{\beta_0 + \beta_1 X}}$$
+
+We use the modified data set `year3.oversampled` to fit a logistic model `glm.fit` and use the `coef` and `summary` functions in order to access just the coefficients for this fitted model. The table of coefficients are listed below.
+
+```{r, error=TRUE}
+glm.fit = glm(year3.oversampled$class ~ model.matrix(class~., data=year3.oversampled)[,-1], family = binomial, data = year3.oversampled)
+# summary(glm.fit)  # return the summary of glm.fit
+# summary(glm.fit)$coef
+```
+
+Then, we use the funtion `predict` to predict the probability of `class` and use `type='response' option to tells R to output the probabilities of the form P(Y=1|X), as opposed to other information such as the logit.Then, we create a class predictions based on whether the predicted probability of bankruptcy is greater than or less than 0.5.
+```{r}
+glm.probs = predict(glm.fit, type = 'response')
+glm.pred = rep(0, nrow(year3.oversampled))
+glm.pred[glm.probs>.5] = 1
+```
+
+Then, we output the confusion matrix and calculate the error rate
+
+```{r}
+table(glm.pred,year3.oversampled$class)
+(glm.error = sum(glm.pred!=year3.oversampled$class)/length(glm.pred))
+```
+
+### Ridge Regression and Cross Validation
+```{r}
+ridge_cv=cv.glmnet(model.matrix(class~., data=train)[,-1],
+                   y = factor(train$class),
+                   alpha = 0, # for ridge regression
+                   family = 'binomial')
+par(mfrow = c(1,2))
+plot(ridge_cv)
+plot(ridge_cv$glmnet.fit, "lambda")
+```
+
+```{r}
+# coef(ridge_model, 'lambda.1se') # show the coefficients
+ridge_pred = predict(ridge_cv,
+                     newx = model.matrix(class~., data=test)[,-1],
+                     type = 'response')
+pred = ifelse(ridge_pred > 0.5, 1, 0)
+table(pred, test$class)
+```
+
+The error rate is 
+```{r}
+(error.ridge = sum(pred!=test$class)/length(pred))
+```
+
+### Lasso Regression and Cross Validation
+```{r}
+lasso_cv=cv.glmnet(model.matrix(class~., data=train)[,-1],
+                   y = factor(train$class),
+                   alpha = 1, # for lasso regression
+                   family = 'binomial')
+par(mfrow = c(1,2))
+plot(lasso_cv)
+plot(lasso_cv$glmnet.fit, "lambda")
+```
+
+```{r}
+# coef(lasso_cv, 'lambda.1se') # show the coefficients
+lasso_pred = predict(lasso_cv,
+                     newx = model.matrix(class~., data=test)[,-1],
+                     type = 'response')
+pred = ifelse(lasso_pred > 0.5, 1, 0)
+table(pred, test$class)
+```
+
+The error rate is 
+```{r}
+(error.lasso = sum(pred!=test$class)/length(pred))
+```
+
+### KNN
+We will use cross validation on knn method to fit a knn model. We will use `createDataPartition`, `trainControl` and `train` functions from package `caret` to fit the model `knn.fit`.
+
+```{r}
+# x = trainControl(method = 'cv',number = 10)
+# knn.fit = train(model.matrix(class~.,data=train)[,-1], # as.factor(train[,65]), method='knn',
+                #preProcess = c('center', 'scale'),
+                #trContrl = x,
+                #tuneGrid = expand.grid(k=1:10))
+```
+
+```{r}
+
+x = dim(train)[1]
+y = ceiling(x/10)
+id = sample(1:x,x,replace = FALSE) 
+
+
+  
+i.list <- 33+(0:9)*10;
+cv.knn = NULL
+
+
+for(i in i.list){
+  knn.error=0
+  for(j in 1:10){
+    
+    test.id = id[seq(y*(j-1)+1,min(x,y*j),1)]
+    train.y = train[-test.id,14]
+    train.x = train[-test.id,-14]
+    
+    test.y = test[-test.id,15]
+    test.x = test[-test.id,-15]
+    
+    knn_fit= knnreg(train.x, train.y,i)
+    knn.error= knn.error + sum((predict(knn_fit, newdata = test.x) - test.y)^2)
+
+  }
+  knn.error=knn.error/x
+  
+  
+  cv.knn=c(cv.knn, knn.error)
+
+}
+```
+
+```{r}
+plot(i.list,cv.knn,type = "b",col = 2,xlab = "k", ylab = "MSE",main = "Error Plot")
+```
+
+
+### Tree and Cross Validation
+```{r}
+tree.full = tree(class~., train)
+summary(tree.full)
+```
+
+```{r}
+# plot the model tree.full
+plot(tree.full)
+text(tree.full,pretty = 0)
+```
+
+```{r}
+tree.pred = predict(tree.full, test, type = 'class')
+table(tree.pred,test$class)
+```
+
+The error rate is 
+```{r}
+sum(tree.pred!=test$class)/length(tree.pred)
+```
+
+Now, consider using cross validation to prun the large tree
+```{r}
+set.seed(1)
+tree.cv = cv.tree(tree.full,FUN=prune.misclass)
+plot(tree.cv$size,tree.cv$dev,type = 'b')
+```
+
+```{r}
+tree.prune = prune.misclass(tree.full, best=14)
+tree.pred = predict(tree.prune, test, type='class')
+table(tree.pred, test$class)
+sum(tree.pred!=test$class)/length(tree.pred)
+```
+
+There is no much improvement when we prune the full tree model. But the error rate for tree is much smaller than the error rates for previous methods. 
+
+### Bagging, Random Forest and Boosting
+
+#### Bagging
+```{r}
+bag = randomForest(class~.,data=train, mtry=ncol(train)-1,importance=TRUE)
+plot(bag)
+bag.pred = predict(bag,newdata = test)
+table(bag.pred, test$class)
+```
+
+The error rate for bagging is 
+```{r}
+sum(bag.pred!=test$class)/length(bag.pred)
+```
+
+#### Random Forest
+```{r}
+# Set mtry using hyperparamter tuning
+oob.err = numeric(15)
+test.err = numeric(15)
+for(mtry in 1:15) {
+  rf.loop=randomForest(class~., data = train, 
+                       mtry=mtry, importance=TRUE) 
+  oob.err[mtry] = rf.loop$err.rate[nrow(rf.loop$err.rate),1]
+  
+  pred.loop=predict(rf.loop,newdata=test)
+  test.err[mtry]= sum(pred.loop!=test$class)/length(pred.loop)
+}
+```
+
+```{r}
+matplot(1:mtry, cbind(oob.err,test.err), pch=20 , col=c("red","blue"),type="b",ylab="Mean Squared Error",xlab="Number of Predictors Considered at each Split")
+legend("topright",legend=c("Out of Bag Error","Test Error"),pch=19, col=c("red","blue"))
+```
+
+```{r}
+rf = randomForest(class~.,data = train, mtry=which.min(test.err),
+                  importance=TRUE)
+rf.pred = predict(rf,newdata = test)
+table(rf.pred, test$class)
+```
+
+The error rate for random forest is 
+
+```{r}
+test.err[which.min(test.err)]
+```
+
+```{r}
+plot(rf)
+# black solid line for overall OOB error
+# color line for each category
+```
+
+Currently, the random forest method gives us the best performance. 
+
+
+
+
+
+
+
+
+
+
