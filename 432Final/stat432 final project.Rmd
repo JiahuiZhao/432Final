@@ -1,6 +1,6 @@
 ---
 title: "432 final project"
-author: "Mary Liu"
+author: "Group Stepanov"
 date: "4/1/2019"
 output: pdf_document
 ---
@@ -16,16 +16,16 @@ year5 = read.csv("/Users/maryliu/Downloads/data (1)/csv_result-5year.csv")
 ```{r,echo=FALSE}
 #import library
 library(ggplot2)
-library(ggplot2)
 library(reshape2)
 library(caTools)
 library(caret)
 library(MASS)
-
+library(randomForest) 
 library(ElemStatLearn)
 library(mlbench)
 library(glmnet)
 library(e1071)
+library(DMwR)
 
 ```
 
@@ -61,8 +61,7 @@ ggplot(missing, aes(x = c('year 1', 'year 2', 'year 3', 'year 4', 'year 5'), y=m
 ```
 
 
-Due to the large number of missing values in each dataset, completely delete missing values will result to a large amount of data loss. Thus, we use variable means to replace missing values. We also drop the first variable `id` and factorize variable `class`.  We take year3 data as an example since it got largest missing value.
-
+Due to the large number of missing values in each dataset, completely delete missing values will result to a large amount of data loss. Thus, we use variable means to replace missing values. We also drop the first variable `id` and factorize variable `class`.  We take year1 data as an example.
 ```{r}
 asNumeric = function(x){
   
@@ -72,20 +71,58 @@ asNumeric = function(x){
 factorsNumeric = function(d){
   modifyList(d, lapply(d[, sapply(d, is.factor)],asNumeric))
 }
+year1 = factorsNumeric(year1)
+
+for(i in 2:ncol(year1)){
+  year1[is.na(year1[,i]), i] <- mean(year1[,i], na.rm = TRUE)
+}
+
+# drop id and factorize class
+year1$id = NULL
+year1$class = as.factor(year1$class)
+
+```
+Similarly, we deal with missing values of year 2-5 data. Please refer to `.rmd` file for codes.
+```{r}
+year2 = factorsNumeric(year2)
+
+for(i in 2:ncol(year2)){
+  year2[is.na(year2[,i]), i] <- mean(year2[,i], na.rm = TRUE)
+}
+
 year3 = factorsNumeric(year3)
 
 for(i in 2:ncol(year3)){
   year3[is.na(year3[,i]), i] <- mean(year3[,i], na.rm = TRUE)
 }
 
-# drop id and factorize class
+year4 = factorsNumeric(year4)
+
+for(i in 2:ncol(year4)){
+  year4[is.na(year4[,i]), i] <- mean(year4[,i], na.rm = TRUE)
+}
+
+year5 = factorsNumeric(year5)
+
+for(i in 2:ncol(year5)){
+  year5[is.na(year5[,i]), i] <- mean(year5[,i], na.rm = TRUE)
+}
+
+year2$id = NULL
+year2$class = as.factor(year2$class)
+
 year3$id = NULL
 year3$class = as.factor(year3$class)
-```
 
-### Pie Charts 
+year4$id = NULL
+year4$class = as.factor(year4$class)
+
+year5$id = NULL
+year5$class = as.factor(year5$class)
+
+```
+### 2.2 Pie Charts 
 ```{r, echo=FALSE}
-#install.packages("gridExtra")
 library(gridExtra)
 library(ggplot2)
 draw = function(num1, num2){
@@ -99,17 +136,108 @@ draw = function(num1, num2){
   p + coord_polar(theta = 'y') + labs(x = '', y = '', title = '') + theme(axis.text =           element_blank()) + theme(axis.ticks = element_blank()) + scale_fill_discrete(labels = label)
 }
 par(mfrow=c(2,3))
-
+p1 = draw(table(year1$class)[1],table(year1$class)[2]) + ggtitle("Year1")
+p2 = draw(table(year2$class)[1],table(year2$class)[2]) + ggtitle("Year2")
 p3 = draw(table(year3$class)[1],table(year3$class)[2]) + ggtitle("Year3")
+p4 = draw(table(year4$class)[1],table(year4$class)[2]) + ggtitle("Year4")
+p5 = draw(table(year5$class)[1],table(year5$class)[2]) + ggtitle("Year5")
 
-
-grid.arrange(p3, nrow = 3)
+grid.arrange(p1, p2,p3,p4,p5, nrow = 3)
 ```
 
-The pie charts above show that the data is imbalanced. It has `0` with above 95.3%.   
+The pie charts above show that the data is imbalanced. Most of them has `0` with above 93%.   
 
-###  Heatmap
+### 2.3 Heatmap
+
 ```{r, echo=FALSE}
+#heatmap plot year1
+temp1 = year1[-65]
+
+cormat <- round(cor(temp1),2)
+melted_cormat <- melt(cormat)
+
+  # Get upper triangle of the correlation matrix
+  get_upper_tri <- function(cormat){
+    cormat[lower.tri(cormat)]<- NA
+    return(cormat)
+  }
+
+
+upper_tri <- get_upper_tri(cormat)
+# Melt the correlation matrix
+melted_cormat <- melt(upper_tri, na.rm = TRUE)
+# Create a ggheatmap
+ggheatmap <- ggplot(melted_cormat, aes(Var2, Var1, fill = value))+
+ geom_tile(color = "white")+
+ scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+   midpoint = 0, limit = c(-1,1), space = "Lab", 
+    name="Pearson\nCorrelation") +
+  theme_minimal()+ # minimal theme
+ theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+    size = 12, hjust = 1))+
+ coord_fixed() + ggtitle("Year1")
+# Print the heatmap
+
+ggheatmap + 
+theme(axis.text.x = element_text(size=4),
+      axis.text.y = element_text(size=4),
+  axis.title.x = element_blank(),
+  axis.title.y = element_blank(),
+  panel.grid.major = element_blank(),
+  panel.border = element_blank(),
+  panel.background = element_blank(),
+  axis.ticks = element_blank(),
+  legend.justification = c(1, 0),
+  legend.position = c(0.6, 0.7),
+  legend.direction = "horizontal")+
+  guides(fill = guide_colorbar(barwidth = 7, barheight = 1,
+                title.position = "top", title.hjust = 0.5)) +
+  scale_y_discrete(position = "right")
+
+#heatmap plot year2
+temp2 = year2[-65]
+
+cormat <- round(cor(temp2),2)
+melted_cormat <- melt(cormat)
+
+  # Get upper triangle of the correlation matrix
+  get_upper_tri <- function(cormat){
+    cormat[lower.tri(cormat)]<- NA
+    return(cormat)
+  }
+
+
+upper_tri <- get_upper_tri(cormat)
+# Melt the correlation matrix
+melted_cormat <- melt(upper_tri, na.rm = TRUE)
+# Create a ggheatmap
+ggheatmap <- ggplot(melted_cormat, aes(Var2, Var1, fill = value))+
+ geom_tile(color = "white")+
+ scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+   midpoint = 0, limit = c(-1,1), space = "Lab", 
+    name="Pearson\nCorrelation") +
+  theme_minimal()+ # minimal theme
+ theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+    size = 12, hjust = 1))+
+ coord_fixed() + ggtitle("Year2")
+# Print the heatmap
+
+
+ggheatmap + 
+theme(axis.text.x = element_text(size=4),
+      axis.text.y = element_text(size=4),
+  axis.title.x = element_blank(),
+  axis.title.y = element_blank(),
+  panel.grid.major = element_blank(),
+  panel.border = element_blank(),
+  panel.background = element_blank(),
+  axis.ticks = element_blank(),
+  legend.justification = c(1, 0),
+  legend.position = c(0.6, 0.7),
+  legend.direction = "horizontal")+
+  guides(fill = guide_colorbar(barwidth = 7, barheight = 1,
+                title.position = "top", title.hjust = 0.5)) +
+  scale_y_discrete(position = "right")
 
 #heatmap plot year3
 temp3 = year3[-65]
@@ -156,24 +284,248 @@ theme(axis.text.x = element_text(size=4),
                 title.position = "top", title.hjust = 0.5)) +
   scale_y_discrete(position = "right")
 
+#heatmap plot year4
+temp4 = year4[-65]
 
+cormat <- round(cor(temp2),2)
+melted_cormat <- melt(cormat)
+
+  # Get upper triangle of the correlation matrix
+  get_upper_tri <- function(cormat){
+    cormat[lower.tri(cormat)]<- NA
+    return(cormat)
+  }
+
+
+upper_tri <- get_upper_tri(cormat)
+# Melt the correlation matrix
+melted_cormat <- melt(upper_tri, na.rm = TRUE)
+# Create a ggheatmap
+ggheatmap <- ggplot(melted_cormat, aes(Var2, Var1, fill = value))+
+ geom_tile(color = "white")+
+ scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+   midpoint = 0, limit = c(-1,1), space = "Lab", 
+    name="Pearson\nCorrelation") +
+  theme_minimal()+ # minimal theme
+ theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+    size = 12, hjust = 1))+
+ coord_fixed() + ggtitle("Year4")
+# Print the heatmap
+
+
+ggheatmap + 
+theme(axis.text.x = element_text(size=4),
+      axis.text.y = element_text(size=4),
+  axis.title.x = element_blank(),
+  axis.title.y = element_blank(),
+  panel.grid.major = element_blank(),
+  panel.border = element_blank(),
+  panel.background = element_blank(),
+  axis.ticks = element_blank(),
+  legend.justification = c(1, 0),
+  legend.position = c(0.6, 0.7),
+  legend.direction = "horizontal")+
+  guides(fill = guide_colorbar(barwidth = 7, barheight = 1,
+                title.position = "top", title.hjust = 0.5)) +
+  scale_y_discrete(position = "right")
+
+#heatmap plot year5
+temp5 = year5[-65]
+
+cormat <- round(cor(temp5),2)
+melted_cormat <- melt(cormat)
+
+  # Get upper triangle of the correlation matrix
+  get_upper_tri <- function(cormat){
+    cormat[lower.tri(cormat)]<- NA
+    return(cormat)
+  }
+
+
+upper_tri <- get_upper_tri(cormat)
+# Melt the correlation matrix
+melted_cormat <- melt(upper_tri, na.rm = TRUE)
+# Create a ggheatmap
+ggheatmap <- ggplot(melted_cormat, aes(Var2, Var1, fill = value))+
+ geom_tile(color = "white")+
+ scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+   midpoint = 0, limit = c(-1,1), space = "Lab", 
+    name="Pearson\nCorrelation") +
+  theme_minimal()+ # minimal theme
+ theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+    size = 12, hjust = 1))+
+ coord_fixed()
+# Print the heatmap
+
+
+ggheatmap + 
+theme(axis.text.x = element_text(size=4),
+      axis.text.y = element_text(size=4),
+  axis.title.x = element_blank(),
+  axis.title.y = element_blank(),
+  panel.grid.major = element_blank(),
+  panel.border = element_blank(),
+  panel.background = element_blank(),
+  axis.ticks = element_blank(),
+  legend.justification = c(1, 0),
+  legend.position = c(0.6, 0.7),
+  legend.direction = "horizontal")+
+  guides(fill = guide_colorbar(barwidth = 7, barheight = 1,
+                title.position = "top", title.hjust = 0.5)) +
+  scale_y_discrete(position = "right") + ggtitle("Year5")
 
 ```
+
+From correlation heatmap, we can see that there are high correlation between some variables. There could exist collinearty which may affect modeling.
+
+
+## Classification Analysis
+
+### Splitting datasets
+To build classification models, we first split each dataset into training and testing dataset by split ratio = 0.8. We will first use training data to fit various classification models, and then use testing data to make predictions and calculate model accuracy. We take Year 1 dataset as an example. Please refer to `.rmd` file for complete codes. 
+
+```{r}
+#year1
+set.seed(123)
+year1$spl=sample.split(year1[,1],SplitRatio=0.8)
+train_1=subset(year1, year1$spl==TRUE)
+test_1=subset(year1, year1$spl==FALSE)
+
+year1$spl = NULL
+train_1$spl = NULL
+test_1$spl = NULL
+
+train.x_1 = train_1[,-65]  
+train.y_1 = train_1[,65]
+
+test.x_1 = test_1[,-65]
+test.y_1 = test_1[,65]
+```
+
+```{r, echo=FALSE}
+#year2
+set.seed(123)
+year2$spl=sample.split(year2[,1],SplitRatio=0.8)
+train_2=subset(year2, year2$spl==TRUE)
+test_2=subset(year2, year2$spl==FALSE)
+
+year2$spl = NULL
+train_2$spl = NULL
+test_2$spl = NULL
+
+train.x_2 = train_2[,-65]  
+train.y_2 = train_2[,65]
+
+test.x_2 = test_2[,-65]
+test.y_2 = test_2[,65]
+```
+
+```{r, echo=FALSE}
+#year3
+set.seed(123)
+year3$spl=sample.split(year3[,1],SplitRatio=0.8)
+train_3=subset(year3, year3$spl==TRUE)
+test_3=subset(year3, year3$spl==FALSE)
+
+year3$spl = NULL
+train_3$spl = NULL
+test_3$spl = NULL
+
+train.x_3 = train_3[,-65]  
+train.y_3 = train_3[,65]
+
+test.x_3 = test_3[,-65]
+test.y_3 = test_3[,65]
+```
+
+```{r, echo=FALSE}
+#year4
+set.seed(123)
+year4$spl=sample.split(year4[,1],SplitRatio=0.8)
+train_4=subset(year4, year4$spl==TRUE)
+test_4=subset(year4, year4$spl==FALSE)
+
+year4$spl = NULL
+train_4$spl = NULL
+test_4$spl = NULL
+
+train.x_4 = train_4[,-65]  
+train.y_4 = train_4[,65]
+
+test.x_4 = test_4[,-65]
+test.y_4 = test_4[,65]
+```
+
+```{r, echo=FALSE}
+#year5
+set.seed(123)
+year5$spl=sample.split(year5[,1],SplitRatio=0.8)
+train_5=subset(year5, year5$spl==TRUE)
+test_5=subset(year5, year5$spl==FALSE)
+
+year5$spl = NULL
+train_5$spl = NULL
+test_5$spl = NULL
+
+train.x_5 = train_5[,-65]  
+train.y_5 = train_5[,65]
+
+test.x_5 = test_5[,-65]
+test.y_5 = test_5[,65]
+```
+###  Methodology
+
+In this section, we will introduce the methodology behind each model we selected. 
+
+We applied five classification methods in total, include K-Nearest Neighbor (KNN), Logistic Regression, Linear Discriminant Analysis (LDA), Quadratic Discriminant Analysis(QDA), Spline, Random Forest, and Support Vector Machines (SVM). 
+
+Considering variance-bias tradeoff issue, we applied 3-fold cross validation to select best tuning parameter in the range of 1 to 10 for each classification method. 
+
+We also used `smote` method to resample training dataset since imbalanced data.
+
+We can see that `class 0` has a lot more data than that of `class 1` which could affect training performance. We use SMOTE method here.
+
+We take year1 as examples.
+
+#### KNN
+
+We used KNN hard classification method, which is selecting k nearest neighbours of each observation in the training data. Tuning parameter k represents variance-bias tradeoff. As k's value increases, variance decreases and the model is more stable, while the bias increases. To find an optimal k value, we performed 3-fold cross validation on the possible k's range 1-10. 
+
+```{r, warning=FALSE}
+set.seed(123)
+grid = expand.grid(k = 1:10)
+knn_fit1 <- train(train.x_1,train.y_1,method = "knn", trControl = trainControl(method = "cv", 3,sampling = "smote"), tuneGrid = grid)
+```
+```{r, echo=FALSE}
+knn_fit2 <- train(train.x_2,train.y_2,method = "knn", trControl = trainControl(method = "cv", 3,sampling = "smote"), tuneGrid = grid)
+knn_fit3 <- train(train.x_3,train.y_3,method = "knn", trControl = trainControl(method = "cv", 3,sampling = "smote"), tuneGrid = grid)
+knn_fit4 <- train(train.x_4,train.y_4,method = "knn", trControl = trainControl(method = "cv", 3,sampling = "smote"), tuneGrid = grid)
+knn_fit5 <- train(train.x_5,train.y_5,method = "knn", trControl = trainControl(method = "cv", 3,sampling = "smote"), tuneGrid = grid)
+```
+
 
 
 #### LDA
 
 Linear discriminate analysis is classifying observations in training data to the class with the closest centroid (with respect to Mahalanois distance), which also attains the highest posteriror density. We fit LDA model on `class` with respect to all other 64 predictors using `lda()`. 
 
-
-```{r, echo=FALSE}
+```{r, warning=FALSE}
 set.seed(123)
-grid = expand.grid(k = 1:10)
-knn_fit3 <- train(train.x_3,train.y_3,method = "knn", trControl = trainControl(method = "cv", 3,sampling = "smote"), tuneGrid = grid)
+train_1_resample <- SMOTE(class ~ ., train_1, perc.over = 100, perc.under=200)
+train_2_resample <- SMOTE(class ~ ., train_2, perc.over = 100, perc.under=200)
 train_3_resample <- SMOTE(class ~ ., train_3, perc.over = 100, perc.under=200)
-lda_fit3 = lda(class ~., data = train_3_resample)
+train_4_resample <- SMOTE(class ~ ., train_4, perc.over = 100, perc.under=200)
+train_5_resample <- SMOTE(class ~ ., train_5, perc.over = 100, perc.under=200)
+lda_fit1 = lda(class ~., data = train_1_resample)
 
 ```
+```{r, echo=FALSE}
+lda_fit2 = lda(class ~., data = train_2_resample)
+lda_fit3 = lda(class ~., data = train_3_resample)
+lda_fit4 = lda(class ~., data = train_4_resample)
+lda_fit5 = lda(class ~., data = train_5_resample)
+```
+
 
 
 #### SVM
@@ -182,10 +534,273 @@ SVM is a supervised learing models. It mapped the data as points in the space so
 ```{r, warning=FALSE}
 set.seed(123)
 trctrl = trainControl(method = "repeatedcv", number = 10, repeats = 3, sampling = "smote")
+svm_fit_1 = train(class ~., data = train_1, method = "svmRadial", trControl=trctrl, preProcess = c("center", "scale"), tuneLength = 10)
 
-```
-```{r, echo=FALSE}
-
+svm_fit_2 = train(class ~., data = train_2, method = "svmRadial", trControl=trctrl, preProcess = c("center", "scale"), tuneLength = 10)
 svm_fit_3 = train(class ~., data = train_3, method = "svmRadial", trControl=trctrl, preProcess = c("center", "scale"), tuneLength = 10)
-
+svm_fit_4 = train(class ~., data = train_4, method = "svmRadial", trControl=trctrl, preProcess = c("center", "scale"), tuneLength = 10)
+svm_fit_5 = train(class ~., data = train_5, method = "svmRadial", trControl=trctrl, preProcess = c("center", "scale"), tuneLength = 10)
 ```
+### Results
+
+We make prediction on the testing data using various approaches and get confumation matrix and accuracy. We take Year3 as a detailed example.
+
+#### Year 1 
+
+```{r, warning=FALSE}
+#year1 accuracy
+
+#knn
+pred_knn1 = predict(knn_fit1,test.x_1)
+table(pred_knn1,test.y_1)
+acc_knn1 = mean(pred_knn1 == test.y_1)
+cat("KNN accuracy:",acc_knn1,"\n")
+
+#LDA
+
+pred_lda1 = predict(lda_fit1,test.x_1)$class
+table(pred_lda1,test.y_1)
+acc_lda1 = mean(pred_lda1 == test.y_1)
+cat("LDA accuracy:",acc_lda1,"\n")
+
+
+#SVM
+
+pred_svm1 = predict(svm_fit_1,test.x_1)
+table(pred_svm1,test.y_1)
+acc_svm1 = mean(pred_svm1 == test.y_1)
+cat("SVM accuracy:",acc_svm1,"\n")
+```
+
+Similarly, we make confusion matrix and calculate accuracy for the remaining years' data. Complete codes can be found in '.rmd' file.
+
+#### Year 2
+
+```{r, echo=FALSE, warning=FALSE}
+#year2 accuracy
+
+#knn
+pred_knn2 = predict(knn_fit2,test.x_2)
+#table(pred_knn2,test.y_2)
+acc_knn2 = mean(pred_knn2 == test.y_2)
+#cat("KNN accuracy:",acc_knn2,"\n")
+
+#LDA
+
+pred_lda2 = predict(lda_fit2,test.x_2)$class
+#table(pred_lda2,test.y_2)
+acc_lda2 = mean(pred_lda2 == test.y_2)
+#cat("LDA accuracy:",acc_lda2,"\n")
+
+#SVM
+
+pred_svm2 = predict(svm_fit_2,test.x_2)
+#table(pred_svm2,test.y_2)
+acc_svm2 = mean(pred_svm2 == test.y_2)
+#cat("SVM:",acc_svm2,"\n")
+```
+
+
+#### Year 3
+
+```{r, echo=FALSE, warning=FALSE}
+#year3 accuracy
+
+#knn
+pred_knn3 = predict(knn_fit3,test.x_3)
+#table(pred_knn3,test.y_3)
+acc_knn3 = mean(pred_knn3 == test.y_3)
+#cat("KNN accuracy:",acc_knn3,"\n")
+
+#LDA
+
+pred_lda3 = predict(lda_fit3,test.x_3)$class
+#table(pred_lda3,test.y_3)
+acc_lda3 = mean(pred_lda3 == test.y_3)
+#cat("LDA accuracy:",acc_lda3,"\n")
+
+#SVM
+
+pred_svm3 = predict(svm_fit_3,test.x_3)
+#table(pred_svm3,test.y_3)
+acc_svm3 = mean(pred_svm3 == test.y_3)
+#cat("SVM:",acc_svm3,"\n")
+```
+
+
+#### Year4
+
+```{r, echo=FALSE, warning=FALSE}
+#year4 accuracy
+
+#knn
+pred_knn4 = predict(knn_fit4,test.x_4)
+#table(pred_knn4,test.y_4)
+acc_knn4 = mean(pred_knn4 == test.y_4)
+#cat("KNN accuracy:",acc_knn4,"\n")
+
+#LDA
+
+pred_lda4 = predict(lda_fit4,test.x_4)$class
+#table(pred_lda4,test.y_4)
+acc_lda4 = mean(pred_lda4 == test.y_4)
+#cat("LDA accuracy:",acc_lda4,"\n")
+
+
+#SVM
+
+pred_svm4 = predict(svm_fit_4,test.x_4)
+#table(pred_svm4,test.y_4)
+acc_svm4 = mean(pred_svm4 == test.y_4)
+#cat("SVM:",acc_svm4,"\n")
+```
+
+
+#### Year5
+
+```{r, echo=FALSE, warning=FALSE}
+#year5 accuracy
+
+#knn
+pred_knn5 = predict(knn_fit5,test.x_5)
+#table(pred_knn5,test.y_5)
+acc_knn5 = mean(pred_knn5 == test.y_5)
+#cat("KNN accuracy:",acc_knn5,"\n")
+
+#LDA
+
+pred_lda5 = predict(lda_fit5,test.x_5)$class
+#table(pred_lda5,test.y_5)
+acc_lda5 = mean(pred_lda5 == test.y_5)
+#cat("LDA accuracy:",acc_lda5,"\n")
+
+#SVM
+
+pred_svm5 = predict(svm_fit_5,test.x_5)
+#table(pred_svm5,test.y_5)
+acc_svm5 = mean(pred_svm5 == test.y_5)
+#cat("SVM:",acc_svm5,"\n")
+```
+
+#### 3.3.1 Accuracy Analysis by Year's Dataset
+
+###### Year 1
+
+The accuracy plot for the Year 1 dataset is shown in the bar chart below. We can see from the plot that Random Forest and SVM have high accuracy with 0.93. In general, all five classification methods performed well with accuracy about 0.93 and 0.94. The model that performed worst in year 1 is LDA with accuracy 0.70.
+
+```{r,echo=FALSE}
+#year1 
+acc1 = data.frame( rbind(acc_knn1, acc_lda1, acc_svm1) )
+colnames(acc1)='accuracy'
+rownames(acc1)=c('KNN', 'LDA', 'SVM')
+
+ggplot(acc1, aes(x = c('KNN', 'LDA', 'SVM'), y=accuracy))+ ggtitle("year1 Accuracy") + geom_bar(stat="identity") + theme(axis.title.x = element_blank(),plot.title = element_text(hjust = 0.5))
+```
+
+###### Year 2
+
+The accuracy plot for the Year 2 dataset is shown in the bar chart below. We can see from the plot that Random Forest has the highest accuracy with 0.93. Following Random Forest, the next best method is SVM with accuracy 0.90, while the model that performed worst in year 2 is LDA with accuracy 0.62.
+
+```{r,echo=FALSE}
+#year2 
+acc2 = data.frame( rbind(acc_knn2, acc_lda2,  acc_svm2) )
+colnames(acc2)='accuracy'
+rownames(acc2)=c('KNN', 'LDA', 'SVM')
+
+ggplot(acc2, aes(x = c('KNN', 'LDA', 'SVM'), y=accuracy))+ ggtitle("year2 Accuracy") + geom_bar(stat="identity") + theme(axis.title.x = element_blank(),plot.title = element_text(hjust = 0.5))
+```
+
+###### Year 3
+
+The accuracy plot for the Year 3 dataset is shown in the bar chart below. We can see from the plot that Random Forest has the highest accuracy with 0.92. Following Random Forest, the next best method is SVM with accuracy 0.88, while the model that performed worst in year 3 is KNN and LDA with accuracy 0.74 and 0.76.
+
+```{r,echo=FALSE}
+#year3 
+acc3 = data.frame( rbind(acc_knn3, acc_lda3,  acc_svm3) )
+colnames(acc3)='accuracy'
+rownames(acc3)=c('KNN', 'LDA', 'SVM')
+
+ggplot(acc3, aes(x = c('KNN', 'LDA', 'SVM'), y=accuracy))+ ggtitle("year3 Accuracy") + geom_bar(stat="identity") + theme(axis.title.x = element_blank(),plot.title = element_text(hjust = 0.5))
+```
+
+###### Year 4
+
+The accuracy plot for the Year 4 dataset is shown in the bar chart below. We can see from the plot that Random Forest has the highest accuracy with 0.88. Following Random Forest, the next best method is SVM with accuracy 0.87, while the model that performed worst in year 4 are KNN and LDA with accuracy 0.73.
+
+```{r,echo=FALSE}
+#year4 
+acc4 = data.frame( rbind(acc_knn4, acc_lda4,  acc_svm4) )
+colnames(acc4)='accuracy'
+rownames(acc4)=c('KNN', 'LDA', 'SVM')
+
+ggplot(acc4, aes(x = c('KNN', 'LDA',  'SVM'), y=accuracy))+ ggtitle("year4 Accuracy") + geom_bar(stat="identity") + theme(axis.title.x = element_blank(),plot.title = element_text(hjust = 0.5))
+```
+
+###### Year 5
+
+The accuracy plot for the Year 5 dataset is shown in the bar chart below. We can see from the plot that Random Forest has the highest accuracy with 0.91. In general, all five classification methods performed well with accuracy above 0.8. Following Random Forest, the next best method is logistic regression with accuracy 0.91, while the model that performed worst in year 5 is KNN and LDA with accuracy 0.80.
+
+```{r,echo=FALSE}
+#year5 
+acc5 = data.frame( rbind(acc_knn5, acc_lda5,acc_svm5) )
+colnames(acc5)='accuracy'
+rownames(acc5)=c('KNN', 'LDA',  'SVM')
+
+ggplot(acc5, aes(x = c('KNN', 'LDA', 'SVM'), y=accuracy))+ ggtitle("year5 Accuracy") + geom_bar(stat="identity") + theme(axis.title.x = element_blank(),plot.title = element_text(hjust = 0.5))
+```
+#### Accuracy Analysis by Classification Methods
+
+###### KNN
+
+The accuracy plot for the KNN method is shown in the bar chart below. We can see from the plot that year 5 has the highest accuracy with 0.80. In general, all five years data performed with accuracy above 0.70. Following year 5, the next best year is year1 with accuracy 0.77, while year2 is has lowest accuracy 0.71.
+
+```{r,echo=FALSE}
+knn <-data.frame(rbind(acc_knn1, acc_knn2, acc_knn3, acc_knn4, acc_knn5))
+#barplot(knn, names.arg=x, main="KNN", xlab='year', col='orange', cex.axis = 1, space=0.4)
+colnames(knn) = "accuracy"
+rownames(knn) = c('year1','year2','year3','year4','year5')
+
+ggplot(knn, aes(x = c('year1','year2','year3','year4','year5'), y=accuracy))+ ggtitle("KNN Accuracy") + geom_bar(stat="identity") + theme(axis.title.x = element_blank(),plot.title = element_text(hjust = 0.5))
+```
+
+###### LDA
+
+The accuracy plot for the LDA method is shown in the bar chart below. We can see from the plot that year5 has the highest accuracy with 0.81. In general, LDA performs not so accurate as other methods. We believe it may be due to the existence of colinear variables, which may affect accuracy negatively.
+
+```{r,echo=FALSE}
+lda <-data.frame(rbind(acc_lda1, acc_lda2, acc_lda3, acc_lda4, acc_lda5))
+colnames(lda) = "accuracy"
+rownames(lda) = c('year1','year2','year3','year4','year5')
+
+ggplot(lda, aes(x = c('year1','year2','year3','year4','year5'), y=accuracy))+ ggtitle("LDA Accuracy") + geom_bar(stat="identity") + theme(axis.title.x = element_blank(),plot.title = element_text(hjust = 0.5))
+```
+
+
+
+###### SVM
+
+The accuracy plot for the SVM method is shown in the bar chart below. We can see from the plot that year1 has the highest accuracy with 0.94. In general, all five years data performed well with accuracy about 0.90 in average. Following year1, the next best year is year5 with accuracy 0.90, while year4. is has lowest accuracy 0.87.
+
+```{r,echo=FALSE}
+svm <-data.frame(rbind(acc_svm1, acc_svm2, acc_svm3, acc_svm4, acc_svm5))
+#barplot(svm, names.arg=x, main="svm", xlab='year', col='orange', cex.axis = 1, space=0.4)
+colnames(svm) = "accuracy"
+rownames(svm) = c('year1','year2','year3','year4','year5')
+
+ggplot(svm, aes(x = c('year1','year2','year3','year4','year5'), y=accuracy))+ ggtitle("SVM Accuracy") + geom_bar(stat="identity") + theme(axis.title.x = element_blank(),plot.title = element_text(hjust = 0.5))
+```
+
+Among all classification methods, SVM perform good with accuracy always higher than 0.84, followed by KNN. 
+
+#### 3.3.3 Accuracy Table
+
+The exact accuracies of each year each classification method are shown in the table below.
+
+```{r,echo=FALSE}
+x<-c('KNN','LDA','SVM')
+acc <- cbind(acc1, acc2, acc3, acc4, acc5)
+rownames(acc)=x
+colnames(acc)=c('year1', 'year2', 'year3','year4', 'year5')
+acc
+```
+
