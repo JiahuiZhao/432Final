@@ -1,0 +1,401 @@
+---
+title: "432 final project"
+author: "Group Stepanov"
+date: "4/1/2019"
+output: pdf_document
+---
+```{r,echo=FALSE}
+#read-in data
+year1 = read.csv("csv_result-1year.csv")
+year2 = read.csv("csv_result-2year.csv")
+year3 = read.csv("csv_result-3year.csv")
+year4 = read.csv("csv_result-4year.csv")
+year5 = read.csv("csv_result-5year.csv")
+```
+
+```{r,echo=FALSE}
+#import library
+library(ggplot2)
+library(reshape2)
+library(caTools)
+library(caret)
+library(MASS)
+library(randomForest) 
+library(ElemStatLearn)
+library(mlbench)
+library(glmnet)
+library(e1071)
+library(DMwR)
+```
+
+### Missing Values & Datat Preprocessing
+
+We first conduct basic data preprocessing. Missing values for each dataset are shown in the graph below.
+
+
+```{r, echo=FALSE}
+year1[year1 == "?"] = NA
+year2[year2 == "?"] = NA
+year3[year3 == "?"] = NA
+year4[year4 == "?"] = NA
+year5[year5 == "?"] = NA
+
+```
+
+```{r, echo=FALSE}
+
+num1 = sum(complete.cases(year1))
+num2 = sum(complete.cases(year2))
+num3 = sum(complete.cases(year3))
+num4 = sum(complete.cases(year4))
+num5 = sum(complete.cases(year5))
+missing = data.frame(rbind(num1, num2, num3, num4, num5))
+#missing = cbind(num1, num2, num3, num4, num5)
+#colnames(missing) = c('year 1', 'year 2', 'year 3', 'year 4', 'year 5')
+colnames(missing) = 'missing'
+#rownames(missing) = 'missing values'
+
+ggplot(missing, aes(x = c('year 1', 'year 2', 'year 3', 'year 4', 'year 5'), y=missing)) + geom_bar(stat="identity") + theme(axis.title.x = element_blank(),
+  axis.title.y = element_blank())  + ggtitle("Missing values")
+```
+
+
+Due to the large number of missing values in each dataset, completely delete missing values will result to a large amount of data loss. Thus, we use variable means to replace missing values. We also drop the first variable `id` and factorize variable `class`.  We take year3 data as an example since it got largest missing value.
+
+```{r}
+asNumeric = function(x){
+  
+ as.numeric(as.character(x))
+}
+
+factorsNumeric = function(d){
+  modifyList(d, lapply(d[, sapply(d, is.factor)],asNumeric))
+}
+year3 = factorsNumeric(year3)
+
+for(i in 2:ncol(year3)){
+  year3[is.na(year3[,i]), i] <- mean(year3[,i], na.rm = TRUE)
+}
+
+# drop id and factorize class
+year3$id = NULL
+year3$class = as.factor(year3$class)
+```
+
+### Pie Charts 
+```{r, echo=FALSE}
+#install.packages("gridExtra")
+library(gridExtra)
+library(ggplot2)
+draw = function(num1, num2){
+  type <- c('0 Not Brankrupcy','1 Brankrupcy')
+  nums <- c(num1,num2)
+  df = data.frame(type = type, nums = nums)
+  p <- ggplot(data = df, mapping = aes(x = 'Content', y = nums, fill = type)) + geom_bar(stat   = 'identity', position = 'stack', width = 1)
+
+  label_value = paste('(', round(df$nums/sum(df$nums) * 100, 1), '%)', sep = '')
+  label = paste(df$type, label_value, sep = '')
+  p + coord_polar(theta = 'y') + labs(x = '', y = '', title = '') + theme(axis.text =           element_blank()) + theme(axis.ticks = element_blank()) + scale_fill_discrete(labels = label)
+}
+par(mfrow=c(2,3))
+
+p3 = draw(table(year3$class)[1],table(year3$class)[2]) + ggtitle("Year3")
+
+
+grid.arrange(p3, nrow = 3)
+```
+
+The pie charts above show that the data is imbalanced. It has `0` with above 95.3%.   
+
+###  Heatmap
+```{r, echo=FALSE}
+
+#heatmap plot year3
+temp3 = year3[-65]
+
+cormat <- round(cor(temp3),2)
+melted_cormat <- melt(cormat)
+
+  # Get upper triangle of the correlation matrix
+  get_upper_tri <- function(cormat){
+    cormat[lower.tri(cormat)]<- NA
+    return(cormat)
+  }
+
+
+upper_tri <- get_upper_tri(cormat)
+# Melt the correlation matrix
+melted_cormat <- melt(upper_tri, na.rm = TRUE)
+# Create a ggheatmap
+ggheatmap <- ggplot(melted_cormat, aes(Var2, Var1, fill = value))+
+ geom_tile(color = "white")+
+ scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+   midpoint = 0, limit = c(-1,1), space = "Lab", 
+    name="Pearson\nCorrelation") +
+  theme_minimal()+ # minimal theme
+ theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+    size = 12, hjust = 1))+
+ coord_fixed() + ggtitle("Year3")
+# Print the heatmap
+
+
+ggheatmap + 
+theme(axis.text.x = element_text(size=4),
+      axis.text.y = element_text(size=4),
+  axis.title.x = element_blank(),
+  axis.title.y = element_blank(),
+  panel.grid.major = element_blank(),
+  panel.border = element_blank(),
+  panel.background = element_blank(),
+  axis.ticks = element_blank(),
+  legend.justification = c(1, 0),
+  legend.position = c(0.6, 0.7),
+  legend.direction = "horizontal")+
+  guides(fill = guide_colorbar(barwidth = 7, barheight = 1,
+                title.position = "top", title.hjust = 0.5)) +
+  scale_y_discrete(position = "right")
+
+
+
+```
+
+From correlation heatmap, we can see that there are high correlation between some variables. There could exist collinearty which may affect modeling.
+
+
+## Classification Analysis
+
+### Splitting datasets
+To build classification models, we first split each dataset into training and testing dataset by split ratio = 0.8. We will first use training data to fit various classification models, and then use testing data to make predictions and calculate model accuracy. We take Year 3 dataset as an example. Please refer to `.rmd` file for complete codes. 
+
+```{r, echo=FALSE}
+#year3
+set.seed(123)
+year3$spl=sample.split(year3[,1],SplitRatio=0.8)
+train_3=subset(year3, year3$spl==TRUE)
+test_3=subset(year3, year3$spl==FALSE)
+
+year3$spl = NULL
+train_3$spl = NULL
+test_3$spl = NULL
+
+train.x_3 = train_3[,-65]  
+train.y_3 = train_3[,65]
+
+test.x_3 = test_3[,-65]
+test.y_3 = test_3[,65]
+```
+###  Methodology
+
+In this section, we will introduce the methodology behind each model we selected. 
+
+We applied five classification methods in total, include K-Nearest Neighbor (KNN), Logistic Regression, Linear Discriminant Analysis (LDA), Quadratic Discriminant Analysis(QDA), Spline, Random Forest, and Support Vector Machines (SVM). 
+
+Considering variance-bias tradeoff issue, we applied 3-fold cross validation to select best tuning parameter in the range of 1 to 10 for each classification method. 
+
+We also used `smote` method to resample training dataset since imbalanced data.
+
+We can see that `class 0` has a lot more data than that of `class 1` which could affect training performance. We use SMOTE method here.
+
+We take year3 as examples.
+
+#### KNN
+
+We used KNN hard classification method, which is selecting k nearest neighbours of each observation in the training data. Tuning parameter k represents variance-bias tradeoff. As k's value increases, variance decreases and the model is more stable, while the bias increases. To find an optimal k value, we performed 3-fold cross validation on the possible k's range 1-10. 
+
+```{r, warning=FALSE}
+set.seed(123)
+grid = expand.grid(k = 1:10)
+
+knn_fit3 <- train(train.x_3,train.y_3,method = "knn", trControl = trainControl(method = "cv", 3,sampling = "smote"), tuneGrid = grid)
+
+```
+
+
+
+#### LDA
+
+Linear discriminate analysis is classifying observations in training data to the class with the closest centroid (with respect to Mahalanois distance), which also attains the highest posteriror density. We fit LDA model on `class` with respect to all other 64 predictors using `lda()`. 
+
+```{r, warning=FALSE}
+set.seed(123)
+train_3_oversample <- SMOTE(class ~ ., train_3, perc.over = 1000, perc.under = 150, k = 40)
+lda_fit3 = lda(class ~., data = train_3_oversample)
+```
+
+```{r}
+train3.lda.values <- predict(lda_fit3)
+ldahist(train3.lda.values$x[,1], g=train_3_oversample$class, xlim = range(-1:1),h=0.1)
+```
+
+
+#### QDA
+
+Collinearity in predictor variables will result in rank deficiency, meaning some of the covariance matrices could not be inverted. Therefore, we use the correlation matrix to exclude the variables with collinearity to perform QDA.
+```{r}
+fit.cor = sort(findCorrelation(cormat, cutoff = 0.9, verbose = FALSE, names = FALSE))
+train_3_reduced = train_3_oversample[-fit.cor]
+#qda_fit3 = qda(class ~., data = train_3_oversample)
+qda_fit3 = qda(class ~., data = train_3_reduced)
+
+test.x_3_reduced = test.x_3[-fit.cor]
+```
+
+
+
+#### SVM
+SVM is a supervised learing models. It mapped the data as points in the space so that we can separate the data. 
+
+```{r, warning=FALSE}
+set.seed(123)
+trctrl = trainControl(method = "repeatedcv", number = 10, repeats = 3, sampling = "smote")
+```
+
+```{r}
+svm_fit_3 = train(class ~., data = train_3, method = "svmRadial", trControl=trctrl, preProcess = c("center", "scale"), tuneLength = 10)
+
+```
+
+
+####Neural Network
+
+A neutral network uses all signals collectively to make judgements. We build this neural network model to predict whether the company would go bankrupt or not.
+```{r}
+set.seed(123)
+library(neuralnet)
+nn_fit3 = neuralnet(class~.,data=train_3_oversample, hidden=3,act.fct = "logistic",
+                linear.output = FALSE)
+```
+
+```{r}
+plot(nn_fit3)
+```
+
+
+
+
+### Results
+
+We make prediction on the testing data using various approaches and get confumation matrix and accuracy. We take Year3 as a detailed example.
+
+#### Year 3
+
+```{r, echo=FALSE, warning=FALSE}
+#year3 accuracy
+
+
+#LDA
+
+pred_lda3 = predict(lda_fit3,test.x_3)$class
+table(pred_lda3,test.y_3)
+acc_lda3 = mean(pred_lda3 == test.y_3)
+cat("LDA accuracy:",acc_lda3,"\n")
+
+#QDA
+
+pred_qda3 = predict(qda_fit3,test.x_3_reduced)$class
+table(pred_qda3,test.y_3)
+acc_qda3 = mean(pred_qda3 == test.y_3)
+cat("QDA accuracy:",acc_qda3,"\n")
+```
+
+```{r}
+#SVM
+
+pred_svm3 = predict(svm_fit_3,test.x_3)
+#table(pred_svm3,test.y_3)
+acc_svm3 = mean(pred_svm3 == test.y_3)
+#cat("SVM:",acc_svm3,"\n")
+```
+
+```{r}
+#Neural Network
+
+pred_nn = predict(nn_fit3,test.x_3)[,1]
+pred_nn = ifelse(pred_nn>0.5, 0, 1)
+table(pred_nn,test.y_3)
+acc_nn = mean(pred_nn == test.y_3)
+cat("Neural network accuracy:",acc_nn,"\n")
+```
+
+
+
+###### Year 3
+
+
+```{r,echo=FALSE}
+#year3 
+acc3 = data.frame( rbind(acc_lda3, acc_svm3) )
+colnames(acc3)='accuracy'
+rownames(acc3)=c( 'LDA',  'SVM')
+
+ggplot(acc3, aes(x = c('LDA',  'SVM'), y=accuracy))+ ggtitle("year3 Accuracy") + geom_bar(stat="identity") + theme(axis.title.x = element_blank(),plot.title = element_text(hjust = 0.5))
+
+```
+
+#### Accuracy Analysis by Classification Methods
+###### LDA
+
+
+
+```{r,echo=FALSE}
+lda <-data.frame(rbind( acc_lda3))
+colnames(lda) = "accuracy"
+rownames(lda) = c('year3')
+
+ggplot(lda, aes(x = c('year3'), y=accuracy))+ ggtitle("LDA Accuracy") + geom_bar(stat="identity") + theme(axis.title.x = element_blank(),plot.title = element_text(hjust = 0.5))
+```
+
+###### QDA
+
+
+
+```{r,echo=FALSE}
+qda <-data.frame(rbind( acc_qda3))
+colnames(qda) = "accuracy"
+rownames(qda) = c('year3')
+
+ggplot(qda, aes(x = c('year3'), y=accuracy))+ ggtitle("QDA Accuracy") + geom_bar(stat="identity") + theme(axis.title.x = element_blank(),plot.title = element_text(hjust = 0.5))
+```
+
+
+
+###### SVM
+
+
+
+```{r,echo=FALSE}
+svm <-data.frame(rbind(acc_svm3))
+#barplot(svm, names.arg=x, main="svm", xlab='year', col='orange', cex.axis = 1, space=0.4)
+colnames(svm) = "accuracy"
+rownames(svm) = c('year3')
+
+ggplot(svm, aes(x = c('year3'), y=accuracy))+ ggtitle("SVM Accuracy") + geom_bar(stat="identity") + theme(axis.title.x = element_blank(),plot.title = element_text(hjust = 0.5))
+```
+
+
+###### Neural Network
+
+
+
+```{r,echo=FALSE}
+nn = data.frame(rbind(acc_nn))
+colnames(nn) = "accuracy"
+rownames(nn) = c('year3')
+
+ggplot(nn, aes(x = c('year3'), y=accuracy))+ ggtitle("Neural Network Accuracy") + geom_bar(stat="identity") + theme(axis.title.x = element_blank(),plot.title = element_text(hjust = 0.5))
+```
+
+
+#### Accuracy Table
+
+The exact accuracies of each year each classification method are shown in the table below.
+
+```{r,echo=FALSE}
+x<-c('LDA','SVM')
+acc <- cbind( acc3)
+rownames(acc)=x
+colnames(acc)=c('year3')
+acc
+```
+
+
