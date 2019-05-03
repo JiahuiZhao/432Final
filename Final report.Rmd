@@ -1,0 +1,594 @@
+---
+title: "Statistical Learning and Bankruptcy Prediction"
+subtitle: "STAT432 Final Project - Group Stepanov"
+author:
+  - Mary Liu (zliu203)  
+  - Ziqiao Hua  (ziqiaoh2)  
+  - Yixin Zhang (yzhng224)  
+  - Sian Liu (sianliu2)  
+  - Jiahui Zhao(jzhao71) 
+
+date: "4/1/2019"
+output: pdf_document
+
+---
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include = FALSE}
+# install and load packages
+pkg_list = c('ggplot2', 'tidyr', 'stringr', 'dplyr', 'foreign', 'knitr',
+             'naniar','gridExtra','DMwR','caret', 'glmnet', 'tree',
+             'randomForest','MASS', 'e1071', 'devtools', 'reshape2', 'neuralnet')
+to_install_pkgs = pkg_list[!(pkg_list %in% installed.packages()[,"Package"])]
+if(length(to_install_pkgs)) {
+  install.packages(to_install_pkgs, repos = "https://cloud.r-project.org")
+}
+sapply(pkg_list, require, character.only = TRUE)
+
+# Sets default chunk options
+knitr::opts_chunk$set(
+  fig.align = "center", 
+  echo = FALSE, 
+  message = FALSE,
+  warning = FALSE,
+  cache = TRUE,
+  error = TRUE
+)
+```
+<!-- Force a new page -->
+\newpage
+
+# 1. Introduction
+
+## 1.1 Project Description and Problem of Interest
+Prediction of firm bankruptcies have been extensively studied in the field of accounting to monitor the financial performance by all shareholders. With the introduction and expansion of statistical learning methods on financial analysis, bankruptcy rate estimation has taken on a new importance [1]. This paper uses an expanded database with more than fifty econometric attributes. The aim of this project is to examine the relationships between these parameters and develop an effective prediction model which allows forecasting the bankruptcy condition of a firm in the near future. In the project, we apply and compare some widely known statistical imputation techniques, such as Decision Tree, K-nearest Neighbor, Logistic Regression and K-Fold Cross Validation and evaluate the performance of these techniques by their accuracy rates. 
+
+## 1.2 Data Source and Description
+
+The dataset we use is called `Polish Companies Bankruptcy Data Set` which is hosted by UCI Machine Learning Repository and collected from EMIS, a database containing information on emerging markets around the world. The bankrupt companies were analyzed in the period 2000-2012, while the still operating companies were evaluated from 2007 to 2013 [4]. In this project, we will use partial data called `3year` for bankruptcy prediction. It contains financial rates from 3rd year of the forecasting period and corresponding class label that indicates bankruptcy status after 3 years.  
+
+The data `3year` contain contains 64 variables and 10503 observations in total. Below are all the variables which are worth studying. The dependent variable is the class variables with levels 0 or 1, indicating the company bankruptcy or not. Some variables as financial ratio could affect the company be classified as bankruptcy or not. For example, the first variable is "net profit/total assets" which is return on assets (ROA), a financial ratio that shows the percentage of profit a company earns in relation to its overall resources. It is possible that the higher the ROA, the less likely the company will be bankrupt. 
+
+### 1.2.1 Variables
+
+Independent Variables:  
+attr1 - net profit / total assets  
+attr2 - total liabilities / total assets  
+attr3 - working capital / total assets  
+attr4 - current assets / short-term liabilities  
+attr5 - [(cash + short-term securities + receivables - short-term   liabilities) / (operating expenses - depreciation)] * 365  
+attr6 - retained earnings / total assets  
+attr7 - EBIT / total assets  
+attr8 - book value of equity / total liabilities  
+attr9 - sales / total assets  
+attr10 - equity / total assets  
+attr11 - (gross profit + extraordinary items + financial expenses) / total assets  
+attr12 - gross profit / short-term liabilities  
+attr13 - (gross profit + depreciation) / sales   
+attr14 - (gross profit + interest) / total assets  
+attr15 - (total liabilities * 365) / (gross profit + depreciation)   
+attr16 - (gross profit + depreciation) / total liabilities   
+attr17 - total assets / total liabilities   
+attr18 - gross profit / total assets   
+attr19 - gross profit / sales   
+attr20 - (inventory * 365) / sales   
+attr21 - sales (n) / sales (n-1)   
+attr22 - profit on operating activities / total assets   
+attr23 - net profit / sales   
+attr24 - gross profit (in 3 years) / total assets   
+attr25 - (equity - share capital) / total assets   
+attr26 - (net profit + depreciation) / total liabilities   
+attr27 - profit on operating activities / financial expenses   
+attr28 - working capital / fixed assets   
+attr29 - logarithm of total assets   
+attr30 - (total liabilities - cash) / sales   
+attr31 - (gross profit + interest) / sales   
+attr32 - (current liabilities * 365) / cost of products sold   
+attr33 - operating expenses / short-term liabilities   
+attr34 - operating expenses / total liabilities   
+attr35 - profit on sales / total assets   
+attr36 - total sales / total assets   
+attr37 - (current assets - inventories) / long-term liabilities   
+attr38 - constant capital / total assets   
+attr39 - profit on sales / sales   
+attr40 - (current assets - inventory - receivables) / short-term liabilities   
+attr41 - total liabilities / ((profit on operating activities + depreciation) * (12/365))   
+attr42 - profit on operating activities / sales   
+attr43 - rotation receivables + inventory turnover in days   
+attr44 - (receivables * 365) / sales   
+attr45 - net profit / inventory   
+attr46 - (current assets - inventory) / short-term liabilities   
+attr47 - (inventory * 365) / cost of products sold   
+attr48 - EBITDA (profit on operating activities - depreciation) / total assets   
+attr49 - EBITDA (profit on operating activities - depreciation) / sales
+attr50 - current assets / total liabilities   
+attr51 - short-term liabilities / total assets   
+attr52 - (short-term liabilities * 365) / cost of products sold)
+attr53 - equity / fixed assets   
+attr54 - constant capital / fixed assets   
+attr55 - working capital   
+attr56 - (sales - cost of products sold) / sales   
+attr57 - (current assets - inventory - short-term liabilities) / (sales - gross profit - depreciation)   
+attr58 - total costs /total sales   
+attr59 - long-term liabilities / equity   
+attr60 - sales / inventory   
+attr61 - sales / receivables   
+attr62 - (short-term liabilities *365) / sales    
+attr63 - sales / short-term liabilities    
+attr64 - sales / fixed assets   
+Dependent Variable:  
+class - the response variable Y: 0 = did not bankrupt; 1 = bankrupt  
+### 1.2.2 10 Observations 
+The head ten observations are listed below:  
+```{r}
+# load in data
+year3 = foreign::read.arff("C:/Users/Iris Zhao/Desktop/432FinalProject/432Final/432Final/3year.arff")
+# top 10 observations
+knitr::kable(head(year3,10)[, 1:8], format = 'latex')
+knitr::kable(head(year3,10)[, 9:16], format = 'latex')
+knitr::kable(head(year3,10)[, 17:24], format = 'latex')
+knitr::kable(head(year3,10)[, 25:32], format = 'latex')
+knitr::kable(head(year3,10)[, 33:40], format = 'latex')
+knitr::kable(head(year3,10)[, 41:48], format = 'latex')
+knitr::kable(head(year3,10)[, 49:56], format = 'latex')
+knitr::kable(head(year3,10)[, 57:65], format = 'latex')
+``` 
+
+
+# 2. Summary statistics and data visualization
+## 2.1 Missing Values & Datat Preprocessing
+
+### 2.1.1 Missing Values
+First We conduct basic data preprocessing. Missing values for dataset are shown in the histogram below.
+```{r,echo=FALSE}
+# clean data
+year3 = foreign::read.arff("C:/Users/Iris Zhao/Desktop/432FinalProject/432Final/432Final/3year.arff")
+year3[year3 == "?"] = NA
+
+# observations contains NA
+sum(!complete.cases(year3))
+num3 = complete.cases(year3)
+missing = data.frame(year3)
+
+
+#rownames(missing) = 'missing values'
+gg_miss_var(missing)
+```
+The plot above shows that attr 37 has the highest missing value.
+
+Due to the large number of missing values in each dataset, completely delete missing values will result to a large amount of data loss. Thus, we use variable means to replace missing values. We also drop the first variable `id` and factorize variable `class`. 
+
+```{r}
+asNumeric = function(x){
+ as.numeric(as.character(x))
+}
+factorsNumeric = function(d){
+  modifyList(d, lapply(d[, sapply(d, is.factor)],asNumeric))
+}
+year3 = factorsNumeric(year3)
+
+for(i in 1:(ncol(year3)-1)){
+  year3[is.na(year3[,i]), i] <- mean(year3[,i], na.rm = TRUE)
+}
+
+year3$class = as.factor(year3$class)
+```
+###  2.1.2 Heatmap
+Shown in below is a correlation map for the year 2010 data that decribes the relationship between the different features. 
+```{r, echo=FALSE}
+library(reshape2)
+#heatmap plot year3
+temp3 = year3[-65]
+
+cormat <- round(cor(temp3),2)
+melted_cormat <- melt(cormat)
+
+  # Get upper triangle of the correlation matrix
+  get_upper_tri <- function(cormat){
+    cormat[lower.tri(cormat)]<- NA
+    return(cormat)
+  }
+
+
+
+upper_tri <- get_upper_tri(cormat)
+
+# Melt the correlation matrix
+melted_cormat <- melt(upper_tri, na.rm = TRUE)
+
+# Create a ggheatmap
+ggheatmap <- ggplot(melted_cormat, aes(Var2, Var1, fill = value))+
+ geom_tile(color = "white")+
+ scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+   midpoint = 0, limit = c(-1,1), space = "Lab", 
+    name="Pearson\nCorrelation") +
+  theme_minimal()+ # minimal theme
+ theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+    size = 12, hjust = 1))+
+ coord_fixed() + ggtitle("year2010")
+# Print the heatmap
+
+
+ggheatmap + 
+theme(axis.text.x = element_text(size=4),
+      axis.text.y = element_text(size=4),
+  axis.title.x = element_blank(),
+  axis.title.y = element_blank(),
+  panel.grid.major = element_blank(),
+  panel.border = element_blank(),
+  panel.background = element_blank(),
+  axis.ticks = element_blank(),
+  legend.justification = c(1, 0),
+  legend.position = c(0.6, 0.7),
+  legend.direction = "horizontal")+
+  guides(fill = guide_colorbar(barwidth = 7, barheight = 1,
+                title.position = "top", title.hjust = 0.5)) +
+  scale_y_discrete(position = "right")
+
+
+
+```
+We can find that attr 2 (total liabilities/ total assets) and attr 10 (Equity/ total assets) have highlist negative correlation. Then we noticed that $$Assets = Liabilities + Owner's Equity$$ which can explain correlation that if total assets are keep same, when liabilities are increased, equity must be decreased.
+## 2.2 Imbalance Data
+
+### 2.2.1 Pie Chart 
+We do a pie chart to show the imbalance in response variable
+```{r,warning=FALSE,message=FALSE}
+draw = function(num1, num2){
+  type <- c('0 Not Bankrupcy','1 Bankrupcy')
+  nums <- c(num1,num2)
+  df = data.frame(type = type, nums = nums)
+  p <- ggplot(data = df, mapping = aes(x = 'Content', y = nums, fill = type)) + 
+    geom_bar(stat='identity', position = 'stack', width = 1)
+
+  label_value = paste('(', round(df$nums/sum(df$nums) * 100, 1), '%)', sep = '')
+  label = paste(df$type, label_value, sep = '')
+  p + coord_polar(theta = 'y') + labs(x = '', y = '', title = '') + 
+    theme(axis.text = element_blank()) + theme(axis.ticks = element_blank()) + 
+    scale_fill_discrete(labels = label)
+}
+par(mfrow=c(2,3))
+
+p3 = draw(table(year3$class)[1],table(year3$class)[2]) + ggtitle("Year3")
+grid.arrange(p3, nrow = 3)
+```
+
+The pie charts above show that the data is imbalanced. It has `0` with above 95.3%. The we use the SMOTE method to oversample the minority group and achieve a more balanced dataset. 
+
+### 2.2.2 SMOTE Algorithm For Unbalanced Classification
+Synthetic Minority Oversampling Technique (SMOTE) is a widely used oversampling technique. We used SMOTE algorithm to creates artificial data based on feature space similarities from minority samples and achieve a more balanced dataset.FIrst we take the difference between the feature vector and its nearest neighbor, than Multiplied this difference by a random number between 0 and 1, and added it to the feature vector under consideration. Finally we choose a random point along the line segment between two specific features to get the new balanced data set: 5445 Bankrupt instances and 7425 Non-bankrupt instances.
+
+```{r}
+# original data
+table(year3$class)
+
+# oversampling 
+year3.oversampled = SMOTE(class~.,year3,perc.over=1000, k = 40, perc.under = 150)
+table(year3.oversampled$class)
+```
+
+
+```{r}
+nrow(year3.oversampled) == sum(complete.cases(year3.oversampled)) # no NA missing
+table(year3.oversampled$class)  # no imbalanced data
+```
+
+### 2.3 Split data
+To build classification models, we split  dataset into training and testing dataset by split ratio = 0.8. We first use training data to fit various classification models, and then use testing data to make predictions and calculate model accuracy. We take Year 2010 dataset as an example. 
+```{r}
+set.seed(1)
+index = createDataPartition(year3.oversampled$class,p=0.8,list=F)
+train = year3.oversampled[index,]
+test = year3.oversampled[-index,]
+```
+### 2.4 PCA
+Principal Component Analysis (PCA) is a useful tool for exploratory data analysis which is a dimensionality reduction or data compression method and can select a subset of variables from a larger set, based on the highest correlations variables.  We want to use Pca to find a direction that displays the largest variance from the variables..
+```{r}
+year3.pca = prcomp(year3.oversampled[,-ncol(year3.oversampled)], center=TRUE, scale = TRUE)
+```
+
+```{r}
+# devtools::install_github("kassambara/factoextra")
+library(factoextra)
+fviz_eig(year3.pca)
+```
+
+```{r}
+train.pca = prcomp(train[,-ncol(train)], center=TRUE, scale = TRUE)
+```
+
+```{r}
+library(factoextra)
+fviz_eig(train.pca)
+```
+As the plot showa above, although the first two principal components are much more influential than others, PC1 only explains around 20% of the variance which is not as higher as normal dataset. As we know that anything above 30% is a good loading, our data show a lowly correlated and we cannot find The largest variance by using PCA.
+```{r, eval = FALSE}
+t = as.data.frame(predict(train.pca, test))
+new_train = train[, c(1:31, ncol(train))]
+new_test = t[, 1:31]
+
+library('neuralnet')
+n = names(new_train)
+f = as.formula(paste('class ~', paste(n[!n %in% "class" ], collapse = "+")))
+
+nn = neuralnet(f, new_train, hidden = 4, linear.output = FALSE, threshold=0.01)
+
+#plot(nn, rep = "best")
+```
+# 3. Model
+In this part, we are looking at the various classification models which based on statistical hypothesis testing, statistical modeling and statistical learning techniques will be explored. We applied five classification methods in total, includeK-Nearest Neighbor (KNN), Logistic Regression, Linear Discriminant Analysis (LDA), Random Forest, Support Vector Machines (SVM),Bagging and .
+
+## 3.1 Logistic Regression
+The `glm` function fits generalized linear models which is a class of models that includes logistic regression. Since the dependent variable `class` in our dataset contains only two categories, we will pass the argument `family = binomial` in order to tell R to run a logistic regression rather than some other type of generalized linear model. The function, logit model, we will use is 
+
+$$Pr(Y=1|X) = \frac{e^{\beta_0 + \beta_1 X}}{1 + e^{\beta_0 + \beta_1 X}}$$
+
+
+
+```{r, error=TRUE}
+glm.fit = glm(year3.oversampled$class ~ model.matrix(class~., data=year3.oversampled)[,-1], family = binomial, data = year3.oversampled)
+# summary(glm.fit)  # return the summary of glm.fit
+# summary(glm.fit)$coef
+```
+
+Then, we use the funtion `predict` to predict the probability of `class` and use `type='response' option to tells R to output the probabilities of the form P(Y=1|X), as opposed to other information such as the logit.Then, we create a class predictions based on whether the predicted probability of bankruptcy is greater than or less than 0.5.
+
+```{r}
+glm.probs = predict(glm.fit, type = 'response')
+glm.pred = rep(0, nrow(year3.oversampled))
+glm.pred[glm.probs>.5] = 1
+```
+
+Then, we output the confusion matrix and calculate the error rate
+
+```{r}
+table(glm.pred,year3.oversampled$class)
+(glm.error = sum(glm.pred!=year3.oversampled$class)/length(glm.pred))
+```
+## 3.2 KNN
+We used KNN hard classification method, which is selecting k nearest neighbours of each observation in the training data. Tuning parameter k represents variance-bias tradeoff. As k's value increases, variance decreases and the model is more stable, while the bias increases. To find an optimal k value, we performed 3-fold cross validation on the possible k's range 1-10.
+```{r}
+grid = expand.grid(k = 1:10)
+knn_fit3 = train(train[,-65],
+                 train[, 65],
+                 method = "knn", 
+                 trControl = trainControl(method = "cv", 
+                                          3),
+                 tuneGrid = grid)
+plot(knn_fit3)
+```
+The plot shows that the best value used for the model was k = 1, which means that the largest ccuracy happens at k = 1.
+```{r}
+knn_pred = predict(knn_fit3, test, type = "prob")
+pred_knn = ifelse(knn_pred[,1] == 1, 0, 1)
+
+table(pred_knn, test$class)
+(knn.error = sum(pred_knn == test$class)/length(pred_knn))
+```
+The confusion matrix of is showing above and thw error rate is 0.6227979.
+## 3.3 Ridge Regression and Cross Validation
+In Ridge and Lasso regressions, we will used loss function:
+$$\sum_{i=1}^n(y_i-\beta_0-\sum_j^p\beta_j x_{ij})^2+(1-\alpha)\lambda\sum_{j}^p\beta_j^2+\alpha\lambda\sum_j^p|\beta_j|$$
+we will use built-in cross-validation function: cv.glmnet() to choose the turning $\lambda$. Since the choice of the cross-validation folds is random, we set a random seed at first. And in 'glmnet' function, we will use $$alpha = 0$$ to determines the regression model:
+$$\sum_{i=1}^n(y_i-\beta_0-\sum_j^p\beta_j x_{ij})^2+\lambda\sum_{j}^p\beta_j^2$$
+
+
+```{r}
+#set.seed(1)
+ridge_cv=cv.glmnet(as.matrix(train[,-ncol(train)]),
+                   y = factor(train$class),
+                   alpha = 0, 
+                   family = 'binomial')
+
+par(mfrow = c(1,2))
+plot(ridge_cv)
+plot(ridge_cv$glmnet.fit, "lambda")
+bestlam_ridge = ridge_cv$lambda.min
+bestlam_ridge
+
+# which.max(abs(coef(model)))
+```
+
+The left plot shows the training mean squared error as the function of $\lambda$. The second plot shows the coefficients for different values of $\lambda$ and it shows that when $\lambda$ becomes larger, the coefficients are tend towards 0 . We also see that the value of $\lambda$ which results in the smallest cross-validation error is 0.009847234
+
+We also create a class predictions table based on the predicted probability of bankruptcy. If probability is greater than 0.5, it will show 1, otherwise will show 0.
+
+```{r}
+
+ridge_pred = predict(ridge_cv,
+                     newx = as.matrix(test[,-ncol(test)]),
+                     s = bestlam_ridge,
+                     type = 'response')
+pred_ridge = ifelse(ridge_pred >= 0.5, 1, 0)
+table(pred_ridge, test$class)
+(error.ridge = sum(pred_ridge!=test$class)/length(pred_ridge))
+```
+
+Then, we gain the confusion matrix and calculate the error rate which is 0.3445998
+## 3.4 Lasso Regression and Cross Validation
+In lasso regression, we want to test if the lasso can yield either a more accurate or a more interpretable model than ridge regression. We will also use the loss function and cv.glmnet to fit model, and in this time, we will use the argument $$alpha = 1$$. we will fit the lasso regression model:
+$$\sum_{i=1}^n(y_i-\beta_0-\sum_j^p\beta_j x_{ij})^2+\lambda\sum_j^p|\beta_j|$$
+```{r}
+lasso_cv=cv.glmnet(model.matrix(class~., data=train)[,-1],
+                   y = factor(train$class),
+                   alpha = 1, 
+                   family = 'binomial')
+
+# model.matrix(class~., data=train)[,-1]
+# as.matrix(train[,-ncol(train)])
+```
+```{r}
+par(mfrow = c(1,2))
+plot(lasso_cv)
+plot(lasso_cv$glmnet.fit, "lambda")
+bestlam_lasso = lasso_cv$lambda.min
+bestlam_lasso
+```
+These two plots show how $\lambda$ changes the mean squared error and the coefficients for different ??. And we can see that 2.274839e-05 is the smallest cross-validation error for ??.
+Next we creat the predictions table as the same way as Ridge Regression.
+```{r}
+lasso_pred = predict(lasso_cv,
+                     newx = model.matrix(class~., data=test)[,-1],
+                     type = 'response')
+pred_lasso = ifelse(lasso_pred > 0.5, 1, 0)
+table(pred_lasso, test$class)
+(error.lasso = sum(pred_lasso!=test$class)/length(pred_lasso))
+```
+
+The error rate is 0.3067358 which is better than Ridge Regression.
+
+## 3.5 SVM
+Support Vector Machines is a supervised learing models. It mapped the data as points in the space so that we can separate the data. We want to choose our cross validation set up to use the trainControl function. In the function below we are going to repeat the process 3 times and have 10-folds.
+```{r, eval=FALSE}
+set.seed(123)
+trctrl = trainControl(method = "repeatedcv", number = 10, repeats = 3)
+
+```
+After that, we set our trainControl parameters as an input in the 'train' function.
+```{r}
+svm_fit_3 = train(class ~., data = train, method = "svmRadial",
+                  trControl=trctrl, 
+                  preProcess = c("center", "scale"), 
+                  tuneLength = 10)
+plot(svm_fit_3, col = "red", lwd = 3,
+     main = "svm")
+pred_svm3 = predict(svm_fit_3,test)
+table(pred_svm3,test$class)
+acc_svm3 = mean(pred_svm3 == test$class)
+cat("SVM accuracy:",acc_svm3,"\n")
+(error.svm3 = sum(pred_svm3!=test$class)/length(pred_svm3))
+
+```
+The final values used for the svm model is C = 128 and error rate is 0.05595855.
+
+
+
+## 3.6 LDA
+
+Linear discriminate analysis is classifying observations in training data to the class with the closest centroid (with respect to Mahalanois distance), which also attains the highest posteriror density. We fit LDA model on `class` with respect to all other 64 predictors using `lda()`. 
+
+```{r, warning=FALSE}
+set.seed(123)
+
+lda_fit3 = lda(class ~., data = year3.oversampled)
+
+
+
+test_3_oversample = SMOTE(class ~ ., test, perc.over = 1000, perc.under = 150, k = 40)
+lda_fit_test3 = lda(class ~., data = test_3_oversample)
+
+```
+
+```{r}
+pred_lda3 = predict(lda_fit3,test)$class
+table(pred_lda3,test$class)
+acc_lda3 = mean(pred_lda3 == test$class)
+cat("LDA accuracy:",acc_lda3,"\n")
+(error.lda = sum(pred_lda3!=test$class)/length(pred_lda3))
+```
+We get the confusion matrix and calculate the error rate: 0.3515544
+
+## 3.7 Decision Tree
+Decision tree is a non-parametric supervised learning method that recursively partition the feature space into hyper-rectangular subsets, and make prediction on each subset. We created a decision tree model to predict the response, "class": whether the company goes bankrupt or not, using all 64 attributes in the Polish Bankruptcy dataset. The model learns simple decision rules inferred from the 64 attributes. Our decision tree model gives equal weights to all 64 attributes and use Gini indices as measure of quality of the splits. The model uses "Attr27" "Attr13" "Attr34" "Attr21" "Attr58" "Attr39" "Attr6"  "Attr26" "Attr29" "Attr59" in the actual model built with "Attr27" as the root node, which features profit on operating activities / financial expenses of each company. The daughter nodes of the root node, "Attr21" and "Attr26", represents sales in current year / sales in the previous year, and (net profit + depreciation) / total liabilities, respectively. 
+```{r}
+tree.full = tree(class~., train)
+summary(tree.full)
+```
+
+```{r}
+# plot the model tree.full
+plot(tree.full)
+text(tree.full,pretty = 0)
+```
+
+```{r}
+tree.pred.full = predict(tree.full, test, type = 'class')
+table(tree.pred.full,test$class)
+```
+
+The error rate is 
+```{r}
+sum(tree.pred.full != test$class)/length(tree.pred.full)
+```
+
+then, We consider using cross-validation to prune the tree, and the optimal tree size stays at 14, which gives us the same model we had.
+```{r}
+set.seed(1)
+tree.cv = cv.tree(tree.full,FUN=prune.misclass)
+plot(tree.cv$size,tree.cv$dev,type = 'b', 
+     xlab = 'Tree Size', 
+     ylab = 'Tree Deviation',
+     main = 'Tree with Cross Validation')
+```
+
+```{r}
+tree.prune = prune.misclass(tree.full, best=14)
+tree.pred = predict(tree.prune, test, type='class')
+table(tree.pred, test$class)
+sum(tree.pred!=test$class)/length(tree.pred)
+```
+
+There is no much improvement when we prune the full tree model. But the error rate for tree is much smaller than the error rates for previous methods. 
+
+## 3.8 Random Forest
+A random forest is a mega estimator that fits a number of decision tree classifiers. Trees are built with randomly selected subsets of features and the best split within the chosen subset is used for these trees. The randomness in this tree-building method yields larger bias and smaller variance due to averaging, and the decrease in variance would overcompensate the increase in bias. We consider different mtry, number of predictors considered at each split, from 1 to 15, and plot the errors. We find the testing error is minimized when mtry=13.
+```{r}
+# Set mtry using hyperparamter tuning
+oob.err = numeric(15)
+test.err = numeric(15)
+
+for(mtry in 1:15) {
+  rf.loop=randomForest(class~., data = train, 
+                       mtry=mtry, importance=TRUE) 
+  oob.err[mtry] = rf.loop$err.rate[nrow(rf.loop$err.rate),1]
+  
+  pred.loop=predict(rf.loop,newdata=test)
+  test.err[mtry]= sum(pred.loop!=test$class)/length(pred.loop)
+}
+```
+
+```{r}
+matplot(1:mtry, cbind(oob.err,test.err), pch=20 , col=c("red","blue"),type="b",ylab="Errors",
+        xlab="Number of Predictors Considered at each Split",
+        main = 'Random Forest: Test Error & OOB Error')
+legend("topright",legend=c("Out of Bag Error","Test Error"),pch=19, col=c("red","blue"))
+```
+
+```{r}
+rf = randomForest(class~.,data = train, mtry=which.min(test.err),
+                  importance=TRUE)
+rf.pred = predict(rf,newdata = test)
+table(rf.pred, test$class)
+```
+
+The error rate for random forest is 
+
+```{r}
+test.err[which.min(test.err)]
+```
+
+```{r}
+plot(rf)
+# black solid line for overall OOB error
+# color line for each category
+```
+
+Currently, the random forest method gives us the best performance. 
+
+## 3.9 Bagging
+```{r}
+bagging = randomForest(class~.,data=train, mtry=ncol(train)-1,importance=TRUE)
+plot(bagging, 
+     main = 'Out-of-Bag Error for Bagging')
+bag.pred = predict(bagging, newdata = test)
+table(bag.pred, test$class)
+```
+
+The error rate for bagging is 
+```{r}
+sum(bag.pred!=test$class)/length(bag.pred)
+```
+## 3.10 Neural Network 
