@@ -1,0 +1,157 @@
+---
+title: "432 project methods II"
+author: "ZiQiao Hua"
+date: "5/3/2019"
+output: pdf_document
+---
+
+```{r,echo=FALSE}
+# clean data
+year3 = foreign::read.arff("3year.arff")
+#year3 = read.csv("csv_result-3year.csv")
+year3[year3 == "?"] = NA
+```
+
+```{r}
+asNumeric = function(x){
+ as.numeric(as.character(x))
+}
+factorsNumeric = function(d){
+  modifyList(d, lapply(d[, sapply(d, is.factor)],asNumeric))
+}
+year3 = factorsNumeric(year3)
+
+for(i in 1:(ncol(year3)-1)){
+  year3[is.na(year3[,i]), i] <- mean(year3[,i], na.rm = TRUE)
+}
+
+year3$class = as.factor(year3$class)
+```
+
+### SMOTE Algorithm For Unbalanced Classification
+```{r}
+year3.oversampled = SMOTE(class~.,year3,perc.over=1000, k = 40, perc.under = 150)
+```
+
+```{r}
+set.seed(1)
+index = createDataPartition(year3.oversampled$class,p=0.8,list=F)
+train = year3.oversampled[index,]
+test = year3.oversampled[-index,]
+```
+
+####Decision Tree
+Decision tree is a non-parametric supervised learning method that recursively partition the feature space into hyper-rectangular subsets, and make prediction on each subset. We created a decision tree model to predict the response, “class”: whether the company goes bankrupt or not, using all 64 attributes in the Polish Bankruptcy dataset. The model learns simple decision rules inferred from the 64 attributes. Our decision tree model gives equal weights to all 64 attributes and use Gini indices as measure of quality of the splits. The model uses "Attr27" "Attr13" "Attr34" "Attr21" "Attr58" "Attr39" "Attr6"  "Attr26" "Attr29" "Attr59" in the actual model built with “Attr27” as the root node, which features profit on operating activities / financial expenses of each company. The daughter nodes of the root node, “Attr21” and “Attr26”, represents sales in current year / sales in the previous year, and (net profit + depreciation) / total liabilities, respectively. 
+```{r}
+tree.full = tree(class ~ ., train)
+plot(tree.full)
+text(tree.full,pretty = 0)
+```
+Before pruning, the confusion matrix of our tree model is
+```{r}
+tree.pred.full = predict(tree.full, test, type = 'class')
+table(tree.pred.full,test$class)
+```
+The error rate is:
+```{r}
+sum(tree.pred.full != test$class)/length(tree.pred.full)
+```
+We then consider using cross-validation to prune the tree, and the optimal tree size stays at 14, which gives us the same model we had.
+```{r}
+set.seed(1)
+tree.cv = cv.tree(tree.full,FUN=prune.misclass)
+plot(tree.cv$size,tree.cv$dev,type = 'b', 
+     xlab = 'Tree Size', 
+     ylab = 'Tree Deviation',
+     main = 'Tree with Cross Validation')
+```
+
+
+####Random Forests
+A random forest is a mega estimator that fits a number of decision tree classifiers. Trees are built with randomly selected subsets of features and the best split within the chosen subset is used for these trees. The randomness in this tree-building method yields larger bias and smaller variance due to averaging, and the decrease in variance would overcompensate the increase in bias. We consider different mtry, number of predictors considered at each split, from 1 to 15, and plot the errors. We find the testing error is minimized when mtry=13.
+```{r}
+# Set mtry using hyperparamter tuning
+oob.err = numeric(15)
+test.err = numeric(15)
+
+for(mtry in 1:15) {
+  rf.loop=randomForest(class~., data = train, 
+                       mtry=mtry, importance=TRUE) 
+  oob.err[mtry] = rf.loop$err.rate[nrow(rf.loop$err.rate),1]
+  
+  pred.loop=predict(rf.loop,newdata=test)
+  test.err[mtry]= sum(pred.loop!=test$class)/length(pred.loop)
+}
+```
+
+```{r}
+matplot(1:mtry, cbind(oob.err,test.err), pch=20 , col=c("red","blue"),type="b",ylab="Errors",
+        xlab="Number of Predictors Considered at each Split",
+        main = 'Random Forest: Test Error & OOB Error')
+legend("topright",legend=c("Out of Bag Error","Test Error"),pch=19, col=c("red","blue"))
+```
+And we use the mean decrease in Gini index when each feature is included in the model to rank the importance of the features as follows:
+
+Besides “Attr27” and “Attr21” that are already explained, “Attr24” represents gross profit in the recent 3 years /  total assets. All the top features are closely tied to recent operating performances of the companies. The confusion matrix of our random forest model is as following:
+```{r}
+rf = randomForest(class~.,data = train, mtry=which.min(test.err),
+                  importance=TRUE)
+rf.pred = predict(rf,newdata = test)
+table(rf.pred, test$class)
+```
+```{r}
+test.err[which.min(test.err)]
+```
+And the error rate is 1.825952%. Not surprisingly, our random forest model outperforms our decision tree model. In fact, this is the most accurate model among all methods we used.
+
+
+####Bagging
+Bagging stands for “Bootstrap aggregating”. This is the application of the Bootstrap procedure to produce a high-variance machine learning algorithm, typically decision tree used for classifying. Bagging avoids the sensitivity of decision trees since changes in the training data could result in very different prediction results of a decision tree, it gets the predicting results from each tree and average the prediction results to improve stability and accuracy. Our bagging model recognizes the same top 10 features as our random forest model, and has the following confusion matrix, the error rate is 2.719503%.
+```{r}
+bagging = randomForest(class~.,data=train, mtry=ncol(train)-1,importance=TRUE)
+plot(bagging, 
+     main = 'Out-of-Bag Error for Bagging')
+bag.pred = predict(bagging, newdata = test)
+table(bag.pred, test$class)
+```
+```{r}
+sum(bag.pred!=test$class)/length(bag.pred)
+```
+
+####Neural Network
+	Functioning like a human brain, the neural network have multiple neurons process signals simultaneously, some neurons process raw sensory inputs, while others build higher representations on that, and so on until one gets outputs that are significant at a higher level and gives judgements. We used 3 hidden neurons in the hidden layer and generated the following neural network. 
+```{r}
+library(neuralnet)
+nn_fit3 = neuralnet(class ~ .,data=train_3_oversample, hidden=3,act.fct = "logistic",
+                linear.output = FALSE)
+```
+And we get an error rate at: 
+```{r}
+#Neural Network
+
+pred_nn = predict(nn_fit3,test.x_3)[,1]
+pred_nn = ifelse(pred_nn>0.5, 0, 1)
+acc_nn = mean(pred_nn == test.y_3)
+cat("Neural network accuracy:",acc_nn,"\n")
+```
+This is higher than most of the models we built on this dataset, the main difference is the neural network generated a significantly higher type 1 error rate. The confusion matrix is as following:
+```{r}
+#Neural Network
+table(pred_nn,test.y_3)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
